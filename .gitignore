@@ -1,0 +1,6 @@
+target/
+build/
+.DS_Store
+assets/fonts/*.ttf
+assets/fonts/*.otf
+build-i386/

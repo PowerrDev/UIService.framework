@@ -1,0 +1,11 @@
+[package]
+name = "ui-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ui-core.workspace = true
+ui-render.workspace = true
+ui-support.workspace = true
+ui-window.workspace = true

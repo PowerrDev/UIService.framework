@@ -1,0 +1,51 @@
+[workspace]
+resolver = "2"
+members = [
+    "apps/about-sevos",
+    "apps/hello-world",
+    "apps/shark",
+    "apps/voyager",
+    "crates/ui",
+    "crates/ui-abi",
+    "crates/ui-app",
+    "crates/ui-assets",
+    "crates/ui-core",
+    "crates/ui-render",
+    "crates/ui-widgets",
+    "crates/ui-platform",
+    "crates/ui-support",
+    "crates/ui-text",
+    "crates/ui-window",
+    "crates/ui-service-nxu",
+    "examples/hello-window",
+    "examples/about-sevos",
+    "examples/voyager",
+]
+
+[workspace.package]
+version = "0.4.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+about-sevos = { path = "apps/about-sevos" }
+hello-world = { path = "apps/hello-world" }
+shark = { path = "apps/shark" }
+voyager = { path = "apps/voyager" }
+ui = { path = "crates/ui" }
+ui-abi = { path = "crates/ui-abi" }
+ui-app = { path = "crates/ui-app" }
+ui-assets = { path = "crates/ui-assets" }
+ui-core = { path = "crates/ui-core" }
+ui-render = { path = "crates/ui-render" }
+ui-widgets = { path = "crates/ui-widgets" }
+ui-platform = { path = "crates/ui-platform" }
+ui-support = { path = "crates/ui-support" }
+ui-text = { path = "crates/ui-text" }
+ui-window = { path = "crates/ui-window" }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"

@@ -1,0 +1,9 @@
+[package]
+name = "voyager-preview"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ui.workspace = true
+voyager.workspace = true

@@ -1,0 +1,25 @@
+[package]
+name = "ui-service-nxu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+about-sevos.workspace = true
+voyager.workspace = true
+ui-abi.workspace = true
+ui-app.workspace = true
+ui-assets.workspace = true
+ui-core.workspace = true
+ui-platform.workspace = true
+ui-render.workspace = true
+ui-text.workspace = true
+ui-widgets.workspace = true
+ui-window.workspace = true
+windowserver-nxu = { path = "../../../WindowServer.framework/crates/windowserver-nxu" }
+
+[build-dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }

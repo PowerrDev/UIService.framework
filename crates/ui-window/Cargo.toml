@@ -1,0 +1,9 @@
+[package]
+name = "ui-window"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ui-core.workspace = true
+ui-render.workspace = true

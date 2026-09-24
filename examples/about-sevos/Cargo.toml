@@ -1,0 +1,11 @@
+[package]
+name = "about-sevos-preview"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ui.workspace = true
+about-sevos.workspace = true
+ui-core.workspace = true
+ui-render.workspace = true
