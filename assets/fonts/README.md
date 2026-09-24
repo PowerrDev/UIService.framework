@@ -1,6 +1,6 @@
 # UIService system fonts
 
-UIService does not vendor font binaries. Put your Inter files here:
+UIService does not vendor Inter. Put your Inter files here:
 
 - `Inter-Regular.ttf`
 - `Inter-SemiBold.ttf` (optional; regular is used as the fallback weight)
@@ -16,3 +16,11 @@ You can also point the build at other locations:
 make nxu INTER_REGULAR=/path/to/Inter-Regular.ttf \
     INTER_SEMIBOLD=/path/to/Inter-SemiBold.ttf
 ```
+
+## Borel
+
+`Borel-Regular.ttf` is vendored (SIL Open Font License 1.1, see
+`LICENSE-Borel.txt`): the setup greeting is set in it, and a first boot must
+not depend on fonts the build host happens to have. `make nxu` embeds it like
+Inter (`BOREL_REGULAR` overrides the path); without it the greeting falls
+back to Inter.

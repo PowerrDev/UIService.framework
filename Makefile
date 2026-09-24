@@ -2,6 +2,8 @@ NXU_TARGET ?= aarch64-unknown-none-softfloat
 NXU_ARCHIVE := target/$(NXU_TARGET)/release/libui_service_nxu.a
 INTER_REGULAR ?= assets/fonts/Inter-Regular.ttf
 INTER_SEMIBOLD ?= assets/fonts/Inter-SemiBold.ttf
+# The setup greeting's script face (vendored, OFL: assets/fonts/LICENSE-Borel.txt).
+BOREL_REGULAR ?= assets/fonts/Borel-Regular.ttf
 CURSOR_ARROW ?= assets/Cursors/arrow.cur
 CURSOR_HAND ?= assets/Cursors/hand.cur
 CURSOR_MOVE ?= assets/Cursors/move.cur
@@ -58,6 +60,7 @@ nxu:
 	fi
 	UISERVICE_INTER_REGULAR="$(abspath $(INTER_REGULAR))" \
 	UISERVICE_INTER_SEMIBOLD="$(abspath $(INTER_SEMIBOLD))" \
+	UISERVICE_BOREL_REGULAR="$(abspath $(BOREL_REGULAR))" \
 	UISERVICE_CURSOR_ARROW="$(abspath $(CURSOR_ARROW))" \
 	UISERVICE_CURSOR_HAND="$(abspath $(CURSOR_HAND))" \
 	UISERVICE_CURSOR_MOVE="$(abspath $(CURSOR_MOVE))" \
@@ -92,6 +95,7 @@ nxu-i386:
 	fi
 	UISERVICE_INTER_REGULAR="$(abspath $(INTER_REGULAR))" \
 	UISERVICE_INTER_SEMIBOLD="$(abspath $(INTER_SEMIBOLD))" \
+	UISERVICE_BOREL_REGULAR="$(abspath $(BOREL_REGULAR))" \
 	UISERVICE_CURSOR_ARROW="$(abspath $(CURSOR_ARROW))" \
 	UISERVICE_CURSOR_HAND="$(abspath $(CURSOR_HAND))" \
 	UISERVICE_CURSOR_MOVE="$(abspath $(CURSOR_MOVE))" \

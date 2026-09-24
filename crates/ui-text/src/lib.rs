@@ -51,6 +51,7 @@ pub enum FontError {
 pub struct FontFamily<'a> {
     regular: Face<'a>,
     semibold: Option<Face<'a>>,
+    cache_tag: u8,
 }
 
 impl<'a> FontFamily<'a> {
@@ -61,7 +62,16 @@ impl<'a> FontFamily<'a> {
             _ => None,
         };
 
-        Ok(Self { regular, semibold })
+        Ok(Self { regular, semibold, cache_tag: 0 })
+    }
+
+    /// Tells this family's glyphs apart from another family's in a shared
+    /// [`TextScratch`]: glyph ids and sizes alone would collide (glyph 5 of
+    /// one font is some other shape in the next). 0..=127; families drawn
+    /// through the same scratch need different tags.
+    pub fn with_cache_tag(mut self, tag: u8) -> Self {
+        self.cache_tag = tag & 0x7F;
+        self
     }
 
     fn face(&self, semibold: bool) -> &Face<'a> {
@@ -297,8 +307,9 @@ impl<'font, 'scratch> TtfTextRenderer<'font, 'scratch> {
     /// The cached coverage bitmap for a glyph, building it first if needed.
     /// `phase` is the pen's quarter-pixel offset (0..=3).
     fn glyph_entry(&mut self, face: &Face<'_>, semibold: bool, glyph: GlyphId, point_size: u32, phase: i32) -> CacheEntry {
-        let key = (1u64 << 63) | (u64::from(semibold) << 48) | (u64::from(glyph.0) << 32) | (u64::from(point_size & 0xFFFF) << 8) | phase as u64;
-        let slot = (glyph.0 as usize * 31 + point_size as usize * 17 + phase as usize * 7 + usize::from(semibold)) % CACHE_SLOTS;
+        let tag = self.family.cache_tag;
+        let key = (1u64 << 63) | (u64::from(tag) << 56) | (u64::from(semibold) << 48) | (u64::from(glyph.0) << 32) | (u64::from(point_size & 0xFFFF) << 8) | phase as u64;
+        let slot = (glyph.0 as usize * 31 + point_size as usize * 17 + phase as usize * 7 + usize::from(semibold) + usize::from(tag) * 101) % CACHE_SLOTS;
 
         for probe in 0..CACHE_SLOTS {
             let entry = self.scratch.entries[(slot + probe) % CACHE_SLOTS];
@@ -815,5 +826,47 @@ mod tests {
             }
         }
         assert_eq!(render(&mut scratch, "Sevos", false), expected);
+    }
+
+    const BOREL: &[u8] = include_bytes!("../../../assets/fonts/Borel-Regular.ttf");
+
+    /// How many pixels one character of `family` covers at `size`.
+    fn inked(family: FontFamily<'_>, scratch: &mut TextScratch, character: &str, size: u32) -> usize {
+        let mut renderer = TtfTextRenderer::new(family, scratch);
+        let mut pixels = std::vec![0x00FF_FFFFu32; 400 * 400];
+        let mut surface = Surface::new(&mut pixels, 400, 400, 400).expect("surface");
+        renderer.draw(&mut surface, Point::new(100, 20), character, Color::BLACK, size, false);
+        pixels.iter().filter(|&&pixel| pixel != 0x00FF_FFFF).count()
+    }
+
+    #[test]
+    fn borel_letters_all_rasterize_at_greeting_sizes() {
+        // A glyph over MAX_GLYPH_DIM or MAX_SEGMENTS is skipped, not clipped:
+        // the setup greeting would silently lose letters. 42 and 84 are its
+        // 1x and 2x sizes; Borel's tallest letter is 1.5 em, so 84 px is
+        // about the most that fits.
+        let mut scratch = Box::new(TextScratch::new());
+        for size in [42u32, 84] {
+            for character in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".chars() {
+                let mut buffer = [0u8; 4];
+                let text = character.encode_utf8(&mut buffer);
+                let family = FontFamily::from_bytes(BOREL, None).expect("Borel");
+                assert!(inked(family, &mut scratch, text, size) > 20, "{character:?} at {size} px drew nothing");
+            }
+        }
+    }
+
+    #[test]
+    fn two_families_sharing_a_scratch_keep_their_own_glyphs() {
+        let mut scratch = Box::new(TextScratch::new());
+        let inter_alone = inked(FontFamily::from_bytes(REGULAR, None).expect("Inter"), &mut scratch, "e", 40);
+        let borel_alone = {
+            let mut fresh = Box::new(TextScratch::new());
+            inked(FontFamily::from_bytes(BOREL, None).expect("Borel"), &mut fresh, "e", 40)
+        };
+        // Same glyph id space, same size: without the tag Borel would get Inter's "e".
+        let borel_shared = inked(FontFamily::from_bytes(BOREL, None).expect("Borel").with_cache_tag(1), &mut scratch, "e", 40);
+        assert_eq!(borel_shared, borel_alone);
+        assert_ne!(borel_shared, inter_alone);
     }
 }

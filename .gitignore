@@ -3,4 +3,6 @@ build/
 .DS_Store
 assets/fonts/*.ttf
 assets/fonts/*.otf
+# Vendored: small, OFL, and first boot must not depend on the build host.
+!assets/fonts/Borel-Regular.ttf
 build-i386/
