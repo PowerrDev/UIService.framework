@@ -1,0 +1,13 @@
+[package]
+name = "login-preview"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ui-abi.workspace = true
+ui-core.workspace = true
+ui-login.workspace = true
+ui-render.workspace = true
+ui-text.workspace = true
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }

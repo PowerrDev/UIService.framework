@@ -13,6 +13,7 @@ mod aqua;
 mod clock;
 mod cursor;
 mod demo;
+mod login;
 mod runtime;
 mod scene;
 mod storage;

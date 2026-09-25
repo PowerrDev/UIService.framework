@@ -14,12 +14,14 @@ members = [
     "crates/ui-widgets",
     "crates/ui-platform",
     "crates/ui-support",
+    "crates/ui-login",
     "crates/ui-text",
     "crates/ui-window",
     "crates/ui-service-nxu",
     "examples/hello-window",
     "examples/about-sevos",
     "examples/voyager",
+    "examples/login-preview",
 ]
 
 [workspace.package]
@@ -41,6 +43,7 @@ ui-render = { path = "crates/ui-render" }
 ui-widgets = { path = "crates/ui-widgets" }
 ui-platform = { path = "crates/ui-platform" }
 ui-support = { path = "crates/ui-support" }
+ui-login = { path = "crates/ui-login" }
 ui-text = { path = "crates/ui-text" }
 ui-window = { path = "crates/ui-window" }
 

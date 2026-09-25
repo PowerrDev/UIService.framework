@@ -1,0 +1,10 @@
+[package]
+name = "ui-login"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ui-abi.workspace = true
+ui-core.workspace = true
+ui-render.workspace = true

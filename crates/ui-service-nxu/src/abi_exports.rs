@@ -1,5 +1,5 @@
 use about_sevos::AboutApp;
-use ui_abi::{HostV1, HostV2, HostV3, HostV4, HostV5, Status, UI_SERVICE_ABI_VERSION};
+use ui_abi::{HostV1, HostV2, HostV3, HostV4, HostV5, LoginHostV1, Status, UI_SERVICE_ABI_VERSION};
 use ui_app::App;
 use ui_core::{Color, Rect};
 use ui_platform::{Host, InteractiveHost, InteractiveHostV3, InteractiveHostV4, InteractiveHostV5};
@@ -252,4 +252,22 @@ pub unsafe extern "C" fn draw_demo(
 
     demo::draw_demo(&mut surface);
     UI_SERVICE_OK
+}
+
+#[unsafe(export_name = "UIServiceLoginHostV1Size")]
+pub extern "C" fn login_host_v1_size() -> u32 {
+    LoginHostV1::expected_size()
+}
+
+/// The setup/login screen: returns `Status::Ok` only once the host's
+/// passcode checker accepted a passcode (or set the first one).
+#[unsafe(export_name = "UIServiceRunLogin")]
+pub unsafe extern "C" fn run_login(host: *const HostV5, login: *const LoginHostV1) -> u32 {
+    let (Some(host), Some(login)) = (unsafe { host.as_ref() }, unsafe { login.as_ref() }) else {
+        return Status::InvalidArgument as u32;
+    };
+    match unsafe { crate::login::run(host, login) } {
+        Ok(()) => Status::Ok as u32,
+        Err(status) => status as u32,
+    }
 }

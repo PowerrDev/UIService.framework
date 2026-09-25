@@ -170,6 +170,23 @@ pub(crate) fn backend(scratch: &mut TextScratch) -> NXUText<'_> {
     NXUText::Bootstrap(BootstrapText)
 }
 
+/// Borel, the setup greeting's script face, when it was embedded. Shares
+/// the Inter scratch under its own cache tag.
+pub(crate) fn display(scratch: &mut TextScratch) -> Option<TtfTextRenderer<'static, '_>> {
+    if generated_fonts::BOREL_REGULAR.is_empty() {
+        return None;
+    }
+
+    FontFamily::from_bytes(generated_fonts::BOREL_REGULAR, None)
+        .ok()
+        .map(|family| TtfTextRenderer::new(family.with_cache_tag(1), scratch))
+}
+
+pub(crate) fn has_display() -> bool {
+    !generated_fonts::BOREL_REGULAR.is_empty()
+        && FontFamily::from_bytes(generated_fonts::BOREL_REGULAR, None).is_ok()
+}
+
 pub(crate) fn has_inter() -> bool {
     if generated_fonts::INTER_REGULAR.is_empty() {
         return false;

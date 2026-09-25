@@ -279,6 +279,13 @@ pub(crate) fn UIDrawDesktop<C: Canvas, T: TextRenderer>(
     app_name: &str,
     other_info: &str,
 ) {
+    UIDrawWallpaper(canvas);
+    UIDrawMenuBar(canvas, text, app_name, other_info);
+}
+
+/// The desktop wallpaper alone, without the menu bar: what the login screen
+/// blurs behind itself.
+pub(crate) fn UIDrawWallpaper<C: Canvas>(canvas: &mut C) {
     let size = canvas.size();
 
     if DRAW_WALLPAPER {
@@ -293,6 +300,4 @@ pub(crate) fn UIDrawDesktop<C: Canvas, T: TextRenderer>(
     } else {
         canvas.fill(DESKTOP_OFF_WHITE);
     }
-
-    UIDrawMenuBar(canvas, text, app_name, other_info);
 }
