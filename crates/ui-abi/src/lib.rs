@@ -18,6 +18,9 @@ pub const UI_SERVICE_HOST_CAP_DAMAGE: u64 = 1 << 1;
 pub const UI_SERVICE_HOST_CAP_INPUT: u64 = 1 << 2;
 pub const UI_SERVICE_HOST_CAP_TIME: u64 = 1 << 3;
 pub const UI_SERVICE_HOST_CAP_FS: u64 = 1 << 4;
+/// The host sends `HostEventType::KeyDown` events. Optional on any host that
+/// has input; an app that never looks at keys is unaffected.
+pub const UI_SERVICE_HOST_CAP_KEYBOARD: u64 = 1 << 5;
 pub const UI_SERVICE_HOST_CAPABILITIES_V1: u64 = UI_SERVICE_HOST_CAP_PRESENT | UI_SERVICE_HOST_CAP_DAMAGE;
 pub const UI_SERVICE_HOST_CAPABILITIES_V2: u64 = UI_SERVICE_HOST_CAPABILITIES_V1 | UI_SERVICE_HOST_CAP_INPUT;
 pub const UI_SERVICE_HOST_CAPABILITIES_V3: u64 = UI_SERVICE_HOST_CAPABILITIES_V2 | UI_SERVICE_HOST_CAP_TIME;
@@ -140,6 +143,11 @@ pub enum HostEventType {
     /// The wheel turned. `HostEvent::reserved` carries the signed number of
     /// notches (positive = wheel up) and `x`/`y` the pointer position.
     Scroll = 4,
+    /// A key went down (or repeats). `HostEvent::button` carries the evdev
+    /// key code (`ui_core::key`), `reserved` the character it types under
+    /// the host's layout and modifiers as a Unicode scalar, 0 for none.
+    /// Only sent by a host with `UI_SERVICE_HOST_CAP_KEYBOARD`.
+    KeyDown = 5,
 }
 
 impl HostEventType {
@@ -150,6 +158,7 @@ impl HostEventType {
             2 => Some(Self::PointerDown),
             3 => Some(Self::PointerUp),
             4 => Some(Self::Scroll),
+            5 => Some(Self::KeyDown),
             _ => None,
         }
     }
@@ -192,6 +201,11 @@ pub struct HostEvent {
 }
 
 impl HostEvent {
+    /// The character a `HostEventType::KeyDown` event types, if any.
+    pub fn key_character(&self) -> Option<char> {
+        char::from_u32(self.reserved).filter(|&character| character != '\0')
+    }
+
     /// The scroll amount of a `HostEventType::Scroll` event, in notches.
     pub const fn scroll_delta(&self) -> i32 {
         self.reserved as i32
@@ -437,6 +451,95 @@ impl HostV5 {
     }
 }
 
+pub const UI_SERVICE_LOGIN_ABI_VERSION_V1: u32 = 1;
+pub const UI_SERVICE_PASSCODE_MIN: u32 = 4;
+pub const UI_SERVICE_PASSCODE_MAX: u32 = 64;
+
+/// Answers of the login host's passcode callbacks (`UI_SERVICE_AUTH_*`).
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AuthResult {
+    Ok = 0,
+    Denied = 1,
+    RetryLater = 2,
+    Locked = 3,
+    Unavailable = 4,
+    NotSet = 5,
+    Invalid = 6,
+    Error = 7,
+}
+
+impl AuthResult {
+    /// Unknown values count as `Error`: never as a success.
+    pub const fn from_raw(value: u32) -> Self {
+        match value {
+            0 => Self::Ok,
+            1 => Self::Denied,
+            2 => Self::RetryLater,
+            3 => Self::Locked,
+            4 => Self::Unavailable,
+            5 => Self::NotSet,
+            6 => Self::Invalid,
+            _ => Self::Error,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct AuthStatus {
+    pub passcode_set: u32,
+    pub failures: u32,
+    pub locked: u32,
+    pub wait_seconds: u32,
+}
+
+pub type AuthStatusFn = unsafe extern "C" fn(context: *mut c_void, status: *mut AuthStatus) -> u32;
+pub type AuthVerifyFn = unsafe extern "C" fn(
+    context: *mut c_void,
+    passcode: *const u8,
+    length: u32,
+    wait_seconds: *mut u32,
+) -> u32;
+pub type AuthSetFn = unsafe extern "C" fn(
+    context: *mut c_void,
+    old_passcode: *const u8,
+    old_length: u32,
+    passcode: *const u8,
+    length: u32,
+    wait_seconds: *mut u32,
+) -> u32;
+
+/// The login screen's host table (`UIServiceLoginHostV1`): separate from the
+/// app host, so only the login screen can reach the passcode checker.
+#[repr(C)]
+pub struct LoginHostV1 {
+    pub header: AbiHeader,
+    pub context: *mut c_void,
+    pub auth_status: Option<AuthStatusFn>,
+    pub auth_verify: Option<AuthVerifyFn>,
+    pub auth_set: Option<AuthSetFn>,
+}
+
+impl LoginHostV1 {
+    pub const fn expected_size() -> u32 {
+        size_of::<Self>() as u32
+    }
+
+    pub fn validate(&self) -> Result<(), Status> {
+        if self.header.abi_version != UI_SERVICE_LOGIN_ABI_VERSION_V1 {
+            return Err(Status::BadVersion);
+        }
+        if self.header.struct_size < Self::expected_size() {
+            return Err(Status::InvalidArgument);
+        }
+        if self.auth_status.is_none() || self.auth_verify.is_none() || self.auth_set.is_none() {
+            return Err(Status::InvalidArgument);
+        }
+        Ok(())
+    }
+}
+
 fn validate_common(
     capabilities: u64,
     get_surface: Option<GetSurfaceFn>,
@@ -454,6 +557,9 @@ fn validate_common(
 }
 
 const _: [(); 8] = [(); size_of::<AbiHeader>()];
+const _: [(); 16] = [(); size_of::<AuthStatus>()];
+#[cfg(target_pointer_width = "64")]
+const _: [(); 40] = [(); size_of::<LoginHostV1>()];
 const _: [(); 16] = [(); size_of::<DamageRect>()];
 const _: [(); 24] = [(); size_of::<HostEvent>()];
 

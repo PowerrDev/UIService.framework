@@ -33,6 +33,8 @@
 #define UI_SERVICE_HOST_CAP_INPUT (1ULL << 2U)
 #define UI_SERVICE_HOST_CAP_TIME (1ULL << 3U)
 #define UI_SERVICE_HOST_CAP_FS (1ULL << 4U)
+/* The host sends UI_SERVICE_EVENT_KEY_DOWN events (optional, any input host). */
+#define UI_SERVICE_HOST_CAP_KEYBOARD (1ULL << 5U)
 #define UI_SERVICE_HOST_CAPABILITIES_V1 (UI_SERVICE_HOST_CAP_PRESENT | UI_SERVICE_HOST_CAP_DAMAGE)
 #define UI_SERVICE_HOST_CAPABILITIES_V2 (UI_SERVICE_HOST_CAPABILITIES_V1 | UI_SERVICE_HOST_CAP_INPUT)
 #define UI_SERVICE_HOST_CAPABILITIES_V3 (UI_SERVICE_HOST_CAPABILITIES_V2 | UI_SERVICE_HOST_CAP_TIME)
@@ -56,6 +58,10 @@
 /* The scroll wheel (or a trackpad's scroll) turned: `reserved` holds the signed
  * number of notches (an int32_t, positive = wheel up), `x`/`y` the pointer. */
 #define UI_SERVICE_EVENT_SCROLL 4U
+/* A key went down or auto-repeats: `button` holds the evdev key code,
+ * `reserved` the character it types (a Unicode scalar, 0 for none),
+ * `x`/`y` the pointer. Only with UI_SERVICE_HOST_CAP_KEYBOARD. */
+#define UI_SERVICE_EVENT_KEY_DOWN 5U
 
 #define UI_SERVICE_POINTER_BUTTON_NONE 0U
 #define UI_SERVICE_POINTER_BUTTON_PRIMARY 1U
@@ -210,6 +216,53 @@ typedef struct {
     UIServiceListDirectoryFn list_directory;
 } UIServiceHostV5;
 
+/*
+ * The login screen's own host table, next to (not inside) the app host: only
+ * UIServiceRunLogin sees these callbacks. The passcode is checked by the
+ * host (on NXU, by tepOS over the Trusted Enclave mailbox); UIService never
+ * stores it and wipes its copy after each call.
+ */
+#define UI_SERVICE_LOGIN_ABI_VERSION_V1 1U
+
+#define UI_SERVICE_PASSCODE_MIN 4U
+#define UI_SERVICE_PASSCODE_MAX 64U
+
+#define UI_SERVICE_AUTH_OK 0U
+#define UI_SERVICE_AUTH_DENIED 1U       /* wrong passcode */
+#define UI_SERVICE_AUTH_RETRY_LATER 2U  /* too soon after failures: *wait_seconds */
+#define UI_SERVICE_AUTH_LOCKED 3U       /* until a recovery reset on the enclave */
+#define UI_SERVICE_AUTH_UNAVAILABLE 4U  /* the checker cannot be reached */
+#define UI_SERVICE_AUTH_NOT_SET 5U      /* no passcode yet */
+#define UI_SERVICE_AUTH_INVALID 6U      /* bad length */
+#define UI_SERVICE_AUTH_ERROR 7U        /* anything else: treated like UNAVAILABLE */
+
+typedef struct {
+    uint32_t passcode_set;
+    uint32_t failures;
+    uint32_t locked;
+    uint32_t wait_seconds;
+} UIServiceAuthStatus;
+
+typedef uint32_t (*UIServiceAuthStatusFn)(void *context, UIServiceAuthStatus *status);
+typedef uint32_t (*UIServiceAuthVerifyFn)(void *context, const uint8_t *passcode, uint32_t length, uint32_t *wait_seconds);
+/* old_length 0 when no passcode is set yet (first boot). */
+typedef uint32_t (*UIServiceAuthSetFn)(
+    void *context,
+    const uint8_t *old_passcode,
+    uint32_t old_length,
+    const uint8_t *passcode,
+    uint32_t length,
+    uint32_t *wait_seconds
+);
+
+typedef struct {
+    UIServiceABIHeader header;
+    void *context;
+    UIServiceAuthStatusFn auth_status;
+    UIServiceAuthVerifyFn auth_verify;
+    UIServiceAuthSetFn auth_set;
+} UIServiceLoginHostV1;
+
 uint32_t UIServiceAPIVersion(void);
 uint32_t UIServiceABIVersion(void);
 uint32_t UIServiceHasInter(void);
@@ -227,6 +280,13 @@ uint32_t UIServiceHostClear(const UIServiceHostV1 *host, uint32_t xrgb8888);
 uint32_t UIServiceDrawAbout(const UIServiceHostV1 *host);
 uint32_t UIServiceRunAbout(const UIServiceHostV5 *host);
 uint32_t UIServiceRunVoyager(const UIServiceHostV5 *host);
+/*
+ * Fullscreen setup (first boot: welcome, then create a passcode) or login.
+ * Returns UI_SERVICE_STATUS_OK only once the passcode was accepted (or set);
+ * while the checker is unavailable it keeps waiting, it never lets anyone in.
+ */
+uint32_t UIServiceLoginHostV1Size(void);
+uint32_t UIServiceRunLogin(const UIServiceHostV5 *host, const UIServiceLoginHostV1 *login);
 
 /* Bring-up helpers. Normal applications should use the Rust app API. */
 uint32_t UIServiceClear(

@@ -309,4 +309,24 @@ pub enum Event {
         position: Point,
         delta: i32,
     },
+    /// A key went down or auto-repeats. `code` is the evdev key code (see
+    /// [`key`]), `character` what it types under the host's layout and
+    /// modifiers, if anything. Only hosts with a keyboard send these.
+    KeyDown {
+        code: u32,
+        character: Option<char>,
+    },
+}
+
+/// evdev key codes an app is likely to act on (the host passes every code
+/// through; these are only names for the common ones).
+pub mod key {
+    pub const ESCAPE: u32 = 1;
+    pub const BACKSPACE: u32 = 14;
+    pub const TAB: u32 = 15;
+    pub const ENTER: u32 = 28;
+    pub const LEFT: u32 = 105;
+    pub const RIGHT: u32 = 106;
+    pub const UP: u32 = 103;
+    pub const DOWN: u32 = 108;
 }

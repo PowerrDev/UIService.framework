@@ -82,6 +82,8 @@ fn localized_event(event: Event, window: Window, suppress: bool) -> Option<Event
             button,
         }),
         Event::PointerLeft => Some(Event::PointerLeft),
+        // Keys go to the focused window whatever the pointer is doing.
+        Event::KeyDown { .. } => Some(event),
         // Only a wheel turned over the content scrolls the app: over the
         // titlebar, the border or the desktop it means nothing to it, and
         // while the window is being dragged or resized it must not reach it.
@@ -324,7 +326,7 @@ pub(crate) unsafe fn run<A: App, const N: usize>(
                 | Event::PointerUp { position, .. } => {
                     dirty = true;
                 }
-                Event::PointerLeft | Event::Scroll { .. } => {}
+                Event::PointerLeft | Event::Scroll { .. } | Event::KeyDown { .. } => {}
             }
 
             let suppress_content = window.is_dragging() || window.is_resizing();

@@ -133,6 +133,10 @@ impl<'a> InteractiveHost<'a> {
                 position,
                 delta: raw.scroll_delta(),
             })),
+            HostEventType::KeyDown => Ok(Some(Event::KeyDown {
+                code: raw.button,
+                character: raw.key_character(),
+            })),
         }
     }
 }
@@ -201,6 +205,10 @@ impl<'a> InteractiveHostV3<'a> {
             HostEventType::Scroll => Ok(Some(Event::Scroll {
                 position,
                 delta: raw.scroll_delta(),
+            })),
+            HostEventType::KeyDown => Ok(Some(Event::KeyDown {
+                code: raw.button,
+                character: raw.key_character(),
             })),
         }
     }
@@ -291,6 +299,10 @@ impl<'a> InteractiveHostV4<'a> {
             HostEventType::Scroll => Ok(Some(Event::Scroll {
                 position,
                 delta: raw.scroll_delta(),
+            })),
+            HostEventType::KeyDown => Ok(Some(Event::KeyDown {
+                code: raw.button,
+                character: raw.key_character(),
             })),
         }
     }
@@ -393,6 +405,10 @@ impl<'a> InteractiveHostV5<'a> {
             HostEventType::Scroll => Ok(Some(Event::Scroll {
                 position,
                 delta: raw.scroll_delta(),
+            })),
+            HostEventType::KeyDown => Ok(Some(Event::KeyDown {
+                code: raw.button,
+                character: raw.key_character(),
             })),
         }
     }
