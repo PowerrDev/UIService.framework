@@ -103,6 +103,7 @@ crates/
   ui-widgets/               reusable controls/views
   ui-window/                window chrome and dragging policy
   ui-text/                  no_std TrueType renderer
+  ui-login/                 first-boot setup and login screen
   ui-assets/                cursor/resource decoding
   ui-support/               app/system metadata
   ui-abi/                   stable repr(C) NXU boundary
