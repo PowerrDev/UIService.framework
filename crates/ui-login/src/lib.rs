@@ -45,8 +45,12 @@ const DANGER: Color = Color::rgb(0xC6, 0x37, 0x37);
 const ACCENT: Color = Color::rgb(0x18, 0x7E, 0xEE);
 const ACCENT_DIM: Color = Color::rgb(0x9C, 0xC4, 0xF5);
 const CARD: Color = Color::rgb(0xFA, 0xFA, 0xFA);
-const WELL: Color = Color::rgb(0xEC, 0xED, 0xF0);
-const WELL_LINE: Color = Color::rgb(0xD5, 0xD7, 0xDC);
+/// macOS-style text fields: white, a thin grey border, and when focused a
+/// blue ring (drawn opaque: the ring colour as it looks over the card).
+const FIELD: Color = Color::rgb(0xFF, 0xFF, 0xFF);
+const FIELD_BORDER: Color = Color::rgb(0xC2, 0xC2, 0xC6);
+const FOCUS_RING: Color = Color::rgb(0x86, 0xB6, 0xF7);
+const PLACEHOLDER: Color = Color::rgb(0xB4, 0xB6, 0xBC);
 
 // ---- the passcode ----------------------------------------------------------
 
@@ -679,9 +683,9 @@ impl LoginScreen {
     fn layout(&self, screen: Size, now_us: u64) -> Layout {
         let pt = scale::pt;
         let (height, field_count) = match self.phase {
-            Phase::Setup => (pt(380), 2),
+            Phase::Setup => (pt(316), 2),
             Phase::Locked => (pt(150), 0),
-            _ => (pt(250), 1),
+            _ => (pt(232), 1),
         };
         let width = pt(420).min(screen.width.saturating_sub(pt(32)));
         let x = (screen.width as i32 - width as i32) / 2 + self.shake_offset(now_us);
@@ -689,10 +693,10 @@ impl LoginScreen {
         let card = Rect::new(x, y, width, height);
         let inset = pt(32) as i32;
         let field_width = width.saturating_sub(2 * pt(32));
-        let first_field_y = y + pt(if field_count == 2 { 142 } else { 110 }) as i32;
+        let first_field_y = y + pt(if field_count == 2 { 124 } else { 108 }) as i32;
         let fields = [
-            Rect::new(x + inset, first_field_y, field_width, pt(38)),
-            Rect::new(x + inset, first_field_y + pt(74) as i32, field_width, pt(38)),
+            Rect::new(x + inset, first_field_y, field_width, pt(28)),
+            Rect::new(x + inset, first_field_y + pt(62) as i32, field_width, pt(28)),
         ];
         let button_width = pt(112);
         let button = if field_count == 0 {
@@ -763,10 +767,7 @@ impl LoginScreen {
         surface.fill_rounded_rect(card, pt(22), CARD);
 
         let (title, lines): (&str, [&str; 2]) = match self.phase {
-            Phase::Setup => ("Create a passcode", [
-                "You will enter it each time sevOS starts.",
-                "tepOS checks it; sevOS never stores it.",
-            ]),
+            Phase::Setup => ("Create a passcode", ["Protect your data and create a strong passcode.", ""]),
             Phase::Locked => ("Passcode locked", [
                 "There were too many wrong attempts.",
                 "It can only be reset on the Trusted Enclave's machine.",
@@ -793,33 +794,51 @@ impl LoginScreen {
             if layout.field_count == 2 {
                 text.draw(surface, Point::new(field.origin.x, field.origin.y - pt(20) as i32), labels[index], MUTED, pt(12), false);
             }
-            surface.fill_rounded_rect(field, pt(10), WELL);
             let focused = index == self.field && !waiting;
-            let underline = if focused { ACCENT } else { WELL_LINE };
-            let thickness = if focused { pt(2).max(1) } else { 1 };
-            surface.fill_rect(
-                Rect::new(field.origin.x + pt(8) as i32, field.origin.y + field.size.height as i32 - thickness as i32, field.size.width.saturating_sub(pt(16)), thickness),
-                underline,
+            let radius = pt(5);
+            if focused {
+                let ring = pt(3).max(2);
+                surface.fill_rounded_rect(
+                    Rect::new(field.origin.x - ring as i32, field.origin.y - ring as i32, field.size.width + 2 * ring, field.size.height + 2 * ring),
+                    radius + ring,
+                    FOCUS_RING,
+                );
+            }
+            let border = 1;
+            surface.fill_rounded_rect(field, radius, FIELD_BORDER);
+            surface.fill_rounded_rect(
+                Rect::new(field.origin.x + border, field.origin.y + border, field.size.width - 2 * border as u32, field.size.height - 2 * border as u32),
+                radius.saturating_sub(1),
+                FIELD,
             );
 
             let secret = if index == 1 { &self.confirm } else { &self.passcode };
-            let dot = pt(4).max(2);
-            let spacing = pt(14) as i32;
-            let first = field.origin.x + pt(16) as i32;
+            let first = field.origin.x + pt(10) as i32;
             let middle = field.origin.y + field.size.height as i32 / 2;
-            let room = (field.size.width as i32 - pt(40) as i32) / spacing;
+            if secret.is_empty() {
+                let placeholder = match (self.phase, index) {
+                    (Phase::Setup, 0) => "Required",
+                    (Phase::Setup, _) => "Verify",
+                    _ => "Passcode",
+                };
+                let measured = text.measure(placeholder, pt(13), false);
+                text.draw(surface, Point::new(first, middle - measured.height as i32 / 2), placeholder, PLACEHOLDER, pt(13), false);
+            }
+            let dot = pt(3).max(2);
+            let spacing = pt(10) as i32;
+            let room = (field.size.width as i32 - pt(24) as i32) / spacing;
             let shown = (secret.len() as i32).min(room.max(0));
             for dot_index in 0..shown {
-                surface.fill_circle(Point::new(first + dot_index * spacing, middle), dot, INK);
+                surface.fill_circle(Point::new(first + dot as i32 + dot_index * spacing, middle), dot, INK);
             }
             if focused && !busy {
-                let caret_x = first + shown * spacing - if shown == 0 { dot as i32 } else { spacing / 2 - dot as i32 };
-                surface.fill_rect(Rect::new(caret_x, middle - pt(9) as i32, pt(2).max(1), pt(18)), INK);
+                let caret_x = if shown == 0 { first - 1 } else { first + shown * spacing + 1 };
+                surface.fill_rect(Rect::new(caret_x, middle - pt(8) as i32, pt(1).max(1), pt(16)), INK);
             }
         }
 
         // The note line sits under the last field.
-        let note_y = layout.fields[layout.field_count - 1].origin.y + pt(48) as i32;
+        let note_y = layout.fields[layout.field_count - 1].origin.y + pt(38) as i32;
         let mut countdown = [0u8; 48];
         let note: Option<(&str, Color)> = if busy {
             Some((if self.pending == Pending::Set { "Setting your passcode..." } else { "Checking..." }, MUTED))
