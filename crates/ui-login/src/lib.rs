@@ -795,18 +795,20 @@ impl LoginScreen {
                 text.draw(surface, Point::new(field.origin.x, field.origin.y - pt(20) as i32), labels[index], MUTED, pt(12), false);
             }
             let focused = index == self.field && !waiting;
-            let radius = pt(5);
+            let radius = pt(7);
             if focused {
                 let ring = pt(3).max(2);
-                surface.fill_rounded_rect(
+                round_rect(
+                    surface,
                     Rect::new(field.origin.x - ring as i32, field.origin.y - ring as i32, field.size.width + 2 * ring, field.size.height + 2 * ring),
                     radius + ring,
                     FOCUS_RING,
                 );
             }
             let border = 1;
-            surface.fill_rounded_rect(field, radius, FIELD_BORDER);
-            surface.fill_rounded_rect(
+            round_rect(surface, field, radius, FIELD_BORDER);
+            round_rect(
+                surface,
                 Rect::new(field.origin.x + border, field.origin.y + border, field.size.width - 2 * border as u32, field.size.height - 2 * border as u32),
                 radius.saturating_sub(1),
                 FIELD,
@@ -890,6 +892,58 @@ struct Layout {
     fields: [Rect; 2],
     field_count: usize,
     button: Rect,
+}
+
+/// A rectangle with anti-aliased circular corners: interior spans are
+/// filled, corner pixels are blended by how much of them the arc covers.
+/// (`Canvas::fill_rounded_rect` draws hard-edged squircle corners, which at
+/// small sizes read as square.)
+fn round_rect(surface: &mut Surface<'_>, rect: Rect, radius: u32, color: Color) {
+    let (width, height) = (rect.size.width as i32, rect.size.height as i32);
+    let r = (radius as i32).min(width / 2).min(height / 2).max(0);
+    let (x0, y0) = (rect.origin.x, rect.origin.y);
+
+    // The middle band and the side bands between the corners.
+    surface.fill_rect(Rect::new(x0, y0 + r, width as u32, (height - 2 * r).max(0) as u32), color);
+    surface.fill_rect(Rect::new(x0 + r, y0, (width - 2 * r).max(0) as u32, r as u32), color);
+    surface.fill_rect(Rect::new(x0 + r, y0 + height - r, (width - 2 * r).max(0) as u32, r as u32), color);
+
+    // The corners: coverage from each pixel centre's distance to the arc
+    // centre, in 1/256 px, with a one-pixel soft edge.
+    for dy in 0..r {
+        for dx in 0..r {
+            let cx = (r - dx) * 256 - 128;
+            let cy = (r - dy) * 256 - 128;
+            let distance = isqrt((cx as u64 * cx as u64 + cy as u64 * cy as u64) as u64) as i32;
+            let coverage = (r * 256 - distance + 128).clamp(0, 256);
+            if coverage == 0 {
+                continue;
+            }
+            let alpha = (u32::from(color.alpha) * coverage as u32 / 256) as u8;
+            let tint = color.with_alpha(alpha);
+            for (px, py) in [
+                (x0 + dx, y0 + dy),
+                (x0 + width - 1 - dx, y0 + dy),
+                (x0 + dx, y0 + height - 1 - dy),
+                (x0 + width - 1 - dx, y0 + height - 1 - dy),
+            ] {
+                surface.blend_pixel(Point::new(px, py), tint);
+            }
+        }
+    }
+}
+
+fn isqrt(value: u64) -> u64 {
+    if value < 2 {
+        return value;
+    }
+    let mut x = value;
+    let mut y = (x + 1) / 2;
+    while y < x {
+        x = y;
+        y = (x + value / x) / 2;
+    }
+    x
 }
 
 fn centered<T: TextRenderer>(surface: &mut Surface<'_>, text: &mut T, line: &str, color: Color, size: u32, semibold: bool, y: i32) {
