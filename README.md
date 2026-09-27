@@ -2,6 +2,7 @@
 
 UIService is sevOS's graphical application framework and the system-facing UI
 runtime for NXU.
+- Disclaimer: This project was assisted by an AI (Claude). UIService.framework & related was just made for fun to test out some new things I've wanted to!
 
 The framework has two intentionally different surfaces:
 
