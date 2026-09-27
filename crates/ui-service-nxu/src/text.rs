@@ -1,122 +1,11 @@
-use ui_core::{Color, Point, Rect, Size};
+use ui_core::{Color, Point, Size};
 use ui_render::{Canvas, TextRenderer};
-use ui_text::{FontFamily, TextScratch, TtfTextRenderer};
+use ui_text::{BootstrapText, FontFamily, TextScratch, TtfTextRenderer};
+
+use crate::storage::{StaticCell, TEXT_SCRATCH};
 
 mod generated_fonts {
     include!(concat!(env!("OUT_DIR"), "/ui_fonts.rs"));
-}
-
-/*
- * Fallback for bring-up builds where Inter has not been embedded yet.
- * The public UI text API stays TTF-capable; this only prevents a missing local
- * font asset from making the NXU bridge unbootable.
- */
-pub(crate) struct BootstrapText;
-
-impl BootstrapText {
-    fn scale(point_size: u32) -> u32 {
-        ((point_size + 5) / 8).max(1)
-    }
-
-    fn glyph(character: char) -> [u8; 7] {
-        match character.to_ascii_uppercase() {
-            'A' => [0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11],
-            'B' => [0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E],
-            'C' => [0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E],
-            'D' => [0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E],
-            'E' => [0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F],
-            'F' => [0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10],
-            'G' => [0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0E],
-            'H' => [0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11],
-            'I' => [0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E],
-            'J' => [0x07, 0x02, 0x02, 0x02, 0x12, 0x12, 0x0C],
-            'K' => [0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11],
-            'L' => [0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F],
-            'M' => [0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11],
-            'N' => [0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11],
-            'O' => [0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E],
-            'P' => [0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10],
-            'Q' => [0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D],
-            'R' => [0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11],
-            'S' => [0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E],
-            'T' => [0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04],
-            'U' => [0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E],
-            'V' => [0x11, 0x11, 0x11, 0x11, 0x0A, 0x0A, 0x04],
-            'W' => [0x11, 0x11, 0x11, 0x15, 0x15, 0x1B, 0x11],
-            'X' => [0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11],
-            'Y' => [0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04],
-            'Z' => [0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F],
-            '0' => [0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E],
-            '1' => [0x04, 0x0C, 0x14, 0x04, 0x04, 0x04, 0x1F],
-            '2' => [0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F],
-            '3' => [0x1E, 0x01, 0x01, 0x0E, 0x01, 0x01, 0x1E],
-            '4' => [0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02],
-            '5' => [0x1F, 0x10, 0x10, 0x1E, 0x01, 0x01, 0x1E],
-            '6' => [0x0E, 0x10, 0x10, 0x1E, 0x11, 0x11, 0x0E],
-            '7' => [0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08],
-            '8' => [0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E],
-            '9' => [0x0E, 0x11, 0x11, 0x0F, 0x01, 0x01, 0x0E],
-            '.' => [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04],
-            '-' => [0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00],
-            ':' => [0x00, 0x04, 0x04, 0x00, 0x04, 0x04, 0x00],
-            '/' => [0x01, 0x02, 0x02, 0x04, 0x08, 0x08, 0x10],
-            ' ' => [0x00; 7],
-            '·' => [0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00],
-            _ => [0x0E, 0x11, 0x01, 0x02, 0x04, 0x00, 0x04],
-        }
-    }
-}
-
-impl TextRenderer for BootstrapText {
-    fn measure(&self, text: &str, point_size: u32, _semibold: bool) -> Size {
-        let scale = Self::scale(point_size);
-        let count = text.chars().count() as u32;
-        let width = if count == 0 {
-            0
-        } else {
-            count * 6 * scale - scale
-        };
-
-        Size::new(width, 7 * scale)
-    }
-
-    fn draw<C: Canvas + ?Sized>(
-        &mut self,
-        canvas: &mut C,
-        origin: Point,
-        text: &str,
-        color: Color,
-        point_size: u32,
-        semibold: bool,
-    ) {
-        let scale = Self::scale(point_size);
-        let pixel_width = scale + if semibold { 1 } else { 0 };
-        let mut x = origin.x;
-
-        for character in text.chars() {
-            let glyph = Self::glyph(character);
-
-            for (row, bits) in glyph.into_iter().enumerate() {
-                for column in 0..5u32 {
-                    if bits & (1u8 << (4 - column)) == 0 {
-                        continue;
-                    }
-
-                    canvas.fill_rect(
-                        Rect::new(
-                            x + (column * scale) as i32,
-                            origin.y + (row as u32 * scale) as i32,
-                            pixel_width,
-                            scale,
-                        ),
-                        color,
-                    );
-                }
-            }
-
-            x += (6 * scale) as i32;
-        }
-    }
 }
 
 pub(crate) enum NXUText<'a> {
@@ -168,6 +57,30 @@ pub(crate) fn backend(scratch: &mut TextScratch) -> NXUText<'_> {
     }
 
     NXUText::Bootstrap(BootstrapText)
+}
+
+/// The desktop's one text backend, built on first use and kept: fonts are
+/// parsed once, and no caller carries a multi-KiB `NXUText` in its own stack
+/// frame (the desktop runs on the arm64 kernel's 16 KiB boot stack, and a
+/// few nested frames that each built their own backend overflowed it into
+/// the kernel's `.bss`). Owns `TEXT_SCRATCH` from then on: only the login
+/// screen, which finishes before the desktop starts, builds its own.
+pub(crate) fn shared() -> &'static mut NXUText<'static> {
+    static SHARED: StaticCell<Option<NXUText<'static>>> = StaticCell::new(None);
+
+    #[inline(never)]
+    fn build(slot: &'static mut Option<NXUText<'static>>) {
+        *slot = Some(backend(unsafe { TEXT_SCRATCH.get_mut() }));
+    }
+
+    let slot = unsafe { SHARED.get_mut() };
+    if slot.is_none() {
+        build(unsafe { SHARED.get_mut() });
+    }
+    match slot {
+        Some(text) => text,
+        None => unreachable!(),
+    }
 }
 
 /// Borel, the setup greeting's script face, when it was embedded. Shares

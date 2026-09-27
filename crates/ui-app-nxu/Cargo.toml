@@ -1,0 +1,17 @@
+[package]
+name = "ui-app-nxu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The runtime of an app process on NXU (not a host-testable crate: it calls
+# NXU's system call wrappers, frameworks/lib/syscall*.c, which only exist in
+# an NXU userland link).
+
+[dependencies]
+ui-app.workspace = true
+ui-bundle.workspace = true
+ui-core.workspace = true
+ui-render.workspace = true
+ui-session.workspace = true
+ui-text.workspace = true

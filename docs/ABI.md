@@ -36,6 +36,21 @@ capability never sends it and an app that ignores keys is unaffected. Rust sees
 it as `Event::KeyDown { code, character }`, and the app runtime hands it to the
 focused window.
 
+### Activity
+
+A host with `UI_SERVICE_HOST_CAP_ACTIVITY` (bit 6) fills in
+`UIServiceHostV5.get_activity`, appended after `list_directory`: one call
+writes a `UIServiceActivity` (CPU count, uptime, physical pages, and per CPU
+the scheduler ticks it took and how many found it busy) and up to `capacity`
+`UIServiceProcessInfo` (pid, parent, state, flags, threads, the MLFQ level of
+its best thread, the CPU it last ran on, its name, and the scheduler ticks its
+threads have run). CPU time is in ticks, never seconds: a share of the machine
+is a ratio of two tick deltas, so the ABI carries no tick rate. Every 64-bit
+field sits at a multiple of 8, so the layout is identical on i386 (where a C
+`uint64_t` member is only 4-aligned); `ui_core::activity` mirrors it and both
+sides assert the sizes (80, 32 and 312 bytes). Apps read it through
+`ui_core::activity::sample`; Activity Monitor is the one that does.
+
 ## Login host table
 
 `UIServiceRunLogin(host, login)` runs the fullscreen setup/login screen

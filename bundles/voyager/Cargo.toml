@@ -1,0 +1,15 @@
+[package]
+name = "voyager-bundle"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The executable of Voyager.app: NXU links this archive with its userland C
+# library and AppKit.framework's main (see NXU's makedefs/apps.mk).
+[lib]
+name = "voyager_bundle"
+crate-type = ["staticlib"]
+
+[dependencies]
+voyager.workspace = true
+ui-app-nxu.workspace = true

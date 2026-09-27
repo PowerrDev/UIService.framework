@@ -279,6 +279,55 @@ impl WindowConfig {
 /// `draw` receives the **content area only**. UIService draws and manages the
 /// title bar/chrome around it. Pointer events delivered to `event` are also
 /// translated into content-local coordinates.
+/// One entry of a menu in the menu bar: a command the app handles in
+/// [`App::menu_command`], or a divider.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MenuItem {
+    Command { title: &'static str, command: u32 },
+    Separator,
+}
+
+impl MenuItem {
+    pub const fn command(title: &'static str, command: u32) -> Self {
+        Self::Command { title, command }
+    }
+
+    pub const SEPARATOR: Self = Self::Separator;
+}
+
+/// A menu-bar title and what drops down under it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Menu {
+    pub title: &'static str,
+    pub items: &'static [MenuItem],
+}
+
+impl Menu {
+    pub const fn new(title: &'static str, items: &'static [MenuItem]) -> Self {
+        Self { title, items }
+    }
+}
+
+/// How a menu command shows right now: greyed out, and/or with a check mark.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MenuItemState {
+    pub enabled: bool,
+    pub checked: bool,
+}
+
+impl MenuItemState {
+    pub const ENABLED: Self = Self { enabled: true, checked: false };
+    pub const DISABLED: Self = Self { enabled: false, checked: false };
+
+    pub const fn enabled(enabled: bool) -> Self {
+        Self { enabled, checked: false }
+    }
+
+    pub const fn checked(checked: bool) -> Self {
+        Self { enabled: true, checked }
+    }
+}
+
 pub trait App {
     const INFO: AppInfo<'static>;
     const WINDOW: WindowConfig;
@@ -319,5 +368,21 @@ pub trait App {
     /// controls never needs to override this.
     fn cursor_kind(&self) -> Option<CursorKind> {
         None
+    }
+
+    /// The app's own menus, shown in the menu bar after its name while it is
+    /// the frontmost app. The system adds the app-name menu (About, Quit) and
+    /// the Window menu itself.
+    const MENUS: &'static [Menu] = &[];
+
+    /// Whether `command` (from [`App::MENUS`]) can be chosen right now, and
+    /// whether it shows a check mark. Asked each time a menu opens.
+    fn menu_item_state(&self, _command: u32) -> MenuItemState {
+        MenuItemState::ENABLED
+    }
+
+    /// The user chose `command` from one of [`App::MENUS`].
+    fn menu_command(&mut self, _command: u32) -> AppAction {
+        AppAction::None
     }
 }

@@ -8,15 +8,13 @@ license.workspace = true
 crate-type = ["staticlib"]
 
 [dependencies]
-about-sevos.workspace = true
-voyager.workspace = true
 ui-abi.workspace = true
-ui-app.workspace = true
 ui-assets.workspace = true
 ui-core.workspace = true
 ui-login.workspace = true
 ui-platform.workspace = true
 ui-render.workspace = true
+ui-session.workspace = true
 ui-text.workspace = true
 ui-widgets.workspace = true
 ui-window.workspace = true

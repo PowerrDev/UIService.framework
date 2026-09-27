@@ -145,6 +145,7 @@ impl Navigator {
     }
 
     fn refresh(&mut self) {
+        crate::appicons::set_directory(self.current_path());
         let raw = unsafe { RAW_ENTRIES.get_mut() };
         match fs::list_directory(self.current_path(), raw) {
             Ok(listing) => {

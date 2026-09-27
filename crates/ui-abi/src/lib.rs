@@ -21,6 +21,8 @@ pub const UI_SERVICE_HOST_CAP_FS: u64 = 1 << 4;
 /// The host sends `HostEventType::KeyDown` events. Optional on any host that
 /// has input; an app that never looks at keys is unaffected.
 pub const UI_SERVICE_HOST_CAP_KEYBOARD: u64 = 1 << 5;
+/// The host fills in `ui_core::activity` through `HostV5::get_activity`.
+pub const UI_SERVICE_HOST_CAP_ACTIVITY: u64 = 1 << 6;
 pub const UI_SERVICE_HOST_CAPABILITIES_V1: u64 = UI_SERVICE_HOST_CAP_PRESENT | UI_SERVICE_HOST_CAP_DAMAGE;
 pub const UI_SERVICE_HOST_CAPABILITIES_V2: u64 = UI_SERVICE_HOST_CAPABILITIES_V1 | UI_SERVICE_HOST_CAP_INPUT;
 pub const UI_SERVICE_HOST_CAPABILITIES_V3: u64 = UI_SERVICE_HOST_CAPABILITIES_V2 | UI_SERVICE_HOST_CAP_TIME;
@@ -260,6 +262,9 @@ pub type ListDirectoryFn = unsafe extern "C" fn(
     truncated_out: *mut bool,
 ) -> u32;
 
+/// Fill `activity` and up to `capacity` processes; see `ui_core::activity`.
+pub type GetActivityFn = ui_core::activity::RawGetActivityFn;
+
 #[repr(C)]
 pub struct HostV1 {
     pub header: AbiHeader,
@@ -417,6 +422,9 @@ pub struct HostV5 {
     /// filesystem to offer -- an app that needs this treats that as
     /// "unavailable", not an error.
     pub list_directory: Option<ListDirectoryFn>,
+    /// `None`, with `UI_SERVICE_HOST_CAP_ACTIVITY` unset, on a host with no
+    /// process or CPU figures to report.
+    pub get_activity: Option<GetActivityFn>,
 }
 
 impl HostV5 {
@@ -444,6 +452,10 @@ impl HostV5 {
         }
 
         if self.capabilities & UI_SERVICE_HOST_CAP_FS != 0 && self.list_directory.is_none() {
+            return Err(Status::InvalidArgument);
+        }
+
+        if self.capabilities & UI_SERVICE_HOST_CAP_ACTIVITY != 0 && self.get_activity.is_none() {
             return Err(Status::InvalidArgument);
         }
 
@@ -579,4 +591,4 @@ const _: [(); 56] = [(); size_of::<HostV3>()];
 const _: [(); 64] = [(); size_of::<HostV4>()];
 
 #[cfg(target_pointer_width = "64")]
-const _: [(); 72] = [(); size_of::<HostV5>()];
+const _: [(); 80] = [(); size_of::<HostV5>()];

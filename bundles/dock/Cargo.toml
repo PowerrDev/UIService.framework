@@ -1,0 +1,16 @@
+[package]
+name = "dock-bundle"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Dock.app's executable (NXU's /System/Library/CoreServices/Dock.app), linked
+# by NXU with its userland C library and AppKit.framework's main.
+[lib]
+name = "dock_bundle"
+crate-type = ["staticlib"]
+
+[dependencies]
+dock.workspace = true
+ui-app-nxu.workspace = true
+ui-session.workspace = true

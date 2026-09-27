@@ -2,15 +2,24 @@
 resolver = "2"
 members = [
     "apps/about-sevos",
+    "apps/activity-monitor",
+    "apps/dock",
     "apps/hello-world",
     "apps/shark",
     "apps/voyager",
+    "bundles/about-sevos",
+    "bundles/activity-monitor",
+    "bundles/dock",
+    "bundles/voyager",
     "crates/ui",
     "crates/ui-abi",
     "crates/ui-app",
+    "crates/ui-app-nxu",
+    "crates/ui-bundle",
     "crates/ui-assets",
     "crates/ui-core",
     "crates/ui-render",
+    "crates/ui-session",
     "crates/ui-widgets",
     "crates/ui-platform",
     "crates/ui-support",
@@ -21,6 +30,8 @@ members = [
     "examples/hello-window",
     "examples/about-sevos",
     "examples/voyager",
+    "examples/activity-monitor",
+    "examples/dock",
     "examples/login-preview",
 ]
 
@@ -31,15 +42,20 @@ license = "MIT"
 
 [workspace.dependencies]
 about-sevos = { path = "apps/about-sevos" }
+activity-monitor = { path = "apps/activity-monitor" }
+dock = { path = "apps/dock" }
 hello-world = { path = "apps/hello-world" }
 shark = { path = "apps/shark" }
 voyager = { path = "apps/voyager" }
 ui = { path = "crates/ui" }
 ui-abi = { path = "crates/ui-abi" }
 ui-app = { path = "crates/ui-app" }
+ui-app-nxu = { path = "crates/ui-app-nxu" }
+ui-bundle = { path = "crates/ui-bundle" }
 ui-assets = { path = "crates/ui-assets" }
 ui-core = { path = "crates/ui-core" }
 ui-render = { path = "crates/ui-render" }
+ui-session = { path = "crates/ui-session" }
 ui-widgets = { path = "crates/ui-widgets" }
 ui-platform = { path = "crates/ui-platform" }
 ui-support = { path = "crates/ui-support" }

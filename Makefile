@@ -21,10 +21,14 @@ ID ?= com.butterscotch.sample-app
 WIDTH ?= 640
 HEIGHT ?= 420
 
-.PHONY: check demo about voyager docs assets new-app nxu nxu-i386 clean
+.PHONY: check demo about voyager docs assets new-app nxu nxu-i386 nxu-apps nxu-apps-i386 clean
+
+# The crates that only link inside NXU (their system calls and panic
+# handlers are NXU's): not part of a host check or test run.
+NXU_ONLY := --exclude ui-service-nxu --exclude ui-app-nxu --exclude voyager-bundle --exclude activity-monitor-bundle --exclude about-sevos-bundle --exclude dock-bundle
 
 check:
-	cargo check --workspace --exclude ui-service-nxu
+	cargo check --workspace $(NXU_ONLY)
 
 demo:
 	cargo run -p hello-window
@@ -36,7 +40,7 @@ voyager:
 	cargo run -p voyager-preview
 
 docs:
-	cargo doc --workspace --exclude ui-service-nxu --no-deps
+	cargo doc --workspace $(NXU_ONLY) --no-deps
 
 new-app:
 	python3 tools/new_app.py \
@@ -112,6 +116,26 @@ nxu-i386:
 	cp include/UIService.h build-i386/UIService.h
 	@echo "UIService NXU i386 archive: build-i386/libUIService.a"
 	@echo "UIService NXU i386 header:  build-i386/UIService.h"
+
+# The app bundles' executables, one static archive each (NXU links them with
+# its userland C library and AppKit.framework's main into
+# /Applications/<Name>.app/Contents/MacOS/<Name>): the apps no longer link
+# into the kernel. Fonts are not embedded: apps read Inter from
+# /System/Library/Fonts when they start.
+NXU_BUNDLES := voyager activity-monitor about-sevos dock
+NXU_BUNDLE_PACKAGES := $(foreach bundle,$(NXU_BUNDLES),-p $(bundle)-bundle)
+
+nxu-apps:
+	cargo build $(NXU_BUNDLE_PACKAGES) --release --target $(NXU_TARGET)
+	mkdir -p build/apps
+	$(foreach bundle,$(NXU_BUNDLES),cp -p target/$(NXU_TARGET)/release/lib$(subst -,_,$(bundle))_bundle.a build/apps/lib$(bundle).a &&) true
+	@echo "UIService NXU app archives: build/apps/"
+
+nxu-apps-i386:
+	cargo +nightly build $(NXU_BUNDLE_PACKAGES) --release $(CARGO_BUILD_STD_FLAGS) --target $(NXU_I386_TARGET_SPEC)
+	mkdir -p build-i386/apps
+	$(foreach bundle,$(NXU_BUNDLES),cp -p target/$(NXU_I386_TARGET)/release/lib$(subst -,_,$(bundle))_bundle.a build-i386/apps/lib$(bundle).a &&) true
+	@echo "UIService NXU i386 app archives: build-i386/apps/"
 
 clean:
 	cargo clean

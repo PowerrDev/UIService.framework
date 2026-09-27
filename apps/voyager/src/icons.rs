@@ -29,6 +29,8 @@ pub enum FileIcon {
     Document,
     /// A blank page with a folded corner.
     Generic,
+    /// An app with no icon of its own: a plain rounded tile.
+    Application,
 }
 
 /// A square drawing area with the 128-unit design grid laid over it.
@@ -104,7 +106,15 @@ pub fn draw_file_icon(canvas: &mut dyn Canvas, rect: Rect, icon: FileIcon) {
         FileIcon::Audio => draw_audio(canvas, &grid),
         FileIcon::Document => draw_page(canvas, &grid, true),
         FileIcon::Generic => draw_page(canvas, &grid, false),
+        FileIcon::Application => draw_app(canvas, &grid),
     }
+}
+
+fn draw_app(canvas: &mut dyn Canvas, grid: &Grid) {
+    let tile = grid.rect(14, 14, 114, 114);
+    draw2d::fill_round_rect(canvas, tile, grid.radius(24), Color::rgb(184, 189, 198));
+    let inner = grid.rect(42, 42, 86, 86);
+    draw2d::fill_round_rect(canvas, inner, grid.radius(10), Color::rgb(236, 238, 242));
 }
 
 fn draw_folder(canvas: &mut dyn Canvas, grid: &Grid) {

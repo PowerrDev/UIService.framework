@@ -372,13 +372,15 @@ fn draw_list_row(frame: &mut Frame<'_>, content: Rect, scrolled: Rect, entries: 
 
     let icon_size = list_icon_size();
     let icon = Rect::new(columns.name_x, row.origin.y + (row.size.height.saturating_sub(icon_size) / 2) as i32, icon_size, icon_size);
-    icons::draw_file_icon(frame.canvas(), icon, entry.kind.icon());
+    if !(entry.is_app() && crate::appicons::draw(frame.canvas(), icon, entry.name())) {
+        icons::draw_file_icon(frame.canvas(), icon, entry.kind.icon());
+    }
 
     let point_size = theme::label_point_size();
     let text_x = columns.name_x + icon_size as i32 + scale::pt_i32(8);
     let name_width = (columns.name_right - text_x).max(0) as u32;
     let mut scratch = [0u8; crate::model::NAME_MAX + 4];
-    let name = theme::fit_name(frame, entry.name(), point_size, FontWeight::Regular, name_width, &mut scratch);
+    let name = theme::fit_name(frame, entry.display_name(), point_size, FontWeight::Regular, name_width, &mut scratch);
     let name_color = if on_accent { theme::ON_ACCENT } else { theme::TEXT_PRIMARY };
     theme::text_in(frame, row, text_x, name, name_color, point_size, FontWeight::Regular);
 
@@ -390,7 +392,7 @@ fn draw_list_row(frame: &mut Frame<'_>, content: Rect, scrolled: Rect, entries: 
     }
 
     let mut size_scratch = [0u8; 20];
-    let size_text = if entry.is_folder() { "--" } else { format_size(entry.size_bytes, &mut size_scratch) };
+    let size_text = if entry.is_folder() || entry.is_app() { "--" } else { format_size(entry.size_bytes, &mut size_scratch) };
     let size_width = frame.measure(size_text, secondary_size).width as i32;
     theme::text_in(frame, row, columns.size_right - size_width, size_text, secondary, secondary_size, FontWeight::Regular);
 
@@ -434,7 +436,9 @@ fn draw_grid_tile(frame: &mut Frame<'_>, content: Rect, scrolled: Rect, entries:
 
     let icon_size = grid_icon_size();
     let icon = Rect::new(plate.origin.x + (plate_size.saturating_sub(icon_size) / 2) as i32, plate.origin.y + (plate_size.saturating_sub(icon_size) / 2) as i32, icon_size, icon_size);
-    icons::draw_file_icon(frame.canvas(), icon, entry.kind.icon());
+    if !(entry.is_app() && crate::appicons::draw(frame.canvas(), icon, entry.name())) {
+        icons::draw_file_icon(frame.canvas(), icon, entry.kind.icon());
+    }
 
     // The name, centred under the icon, on an accent pill when selected.
     let point_size = theme::grid_name_point_size();
@@ -442,7 +446,7 @@ fn draw_grid_tile(frame: &mut Frame<'_>, content: Rect, scrolled: Rect, entries:
     let name_area = Rect::new(tile.origin.x, plate.origin.y + plate_size as i32 + scale::pt_i32(5), tile.size.width, line + scale::pt(3));
     let padding = scale::pt(5);
     let mut scratch = [0u8; crate::model::NAME_MAX + 4];
-    let name = theme::fit_name(frame, entry.name(), point_size, FontWeight::Regular, tile.size.width.saturating_sub(padding * 2), &mut scratch);
+    let name = theme::fit_name(frame, entry.display_name(), point_size, FontWeight::Regular, tile.size.width.saturating_sub(padding * 2), &mut scratch);
     let measured = frame.measure_with_weight(name, point_size, FontWeight::Regular);
 
     if is_selected {

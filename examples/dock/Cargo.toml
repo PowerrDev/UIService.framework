@@ -1,0 +1,12 @@
+[package]
+name = "dock-preview"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Render the Dock with real .icns icons over the wallpaper, to a PNG:
+#   cargo run --offline --release -p dock-preview -- OUT.png SCALE_PERMILLE WALLPAPER ICNS...
+
+[dependencies]
+dock.workspace = true
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }

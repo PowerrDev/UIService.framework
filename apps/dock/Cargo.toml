@@ -1,0 +1,11 @@
+[package]
+name = "dock"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The Dock's logic, host-testable: its layout and drawing (property lists and
+# icons are ui-bundle's). The process around it is bundles/dock.
+
+[dependencies]
+ui-bundle.workspace = true

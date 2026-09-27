@@ -10,6 +10,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "about-sevos-bundle"
+version = "0.4.0"
+dependencies = [
+ "about-sevos",
+ "ui-app-nxu",
+]
+
+[[package]]
 name = "about-sevos-preview"
 version = "0.4.0"
 dependencies = [
@@ -17,6 +25,29 @@ dependencies = [
  "ui",
  "ui-core",
  "ui-render",
+]
+
+[[package]]
+name = "activity-monitor"
+version = "0.4.0"
+dependencies = [
+ "ui",
+]
+
+[[package]]
+name = "activity-monitor-bundle"
+version = "0.4.0"
+dependencies = [
+ "activity-monitor",
+ "ui-app-nxu",
+]
+
+[[package]]
+name = "activity-monitor-preview"
+version = "0.4.0"
+dependencies = [
+ "activity-monitor",
+ "ui",
 ]
 
 [[package]]
@@ -71,6 +102,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8498c871161e1742aaa9d52551b2d6ebdd4c3d45a3be423e3728f33b955be550"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "dock"
+version = "0.4.0"
+dependencies = [
+ "ui-bundle",
+]
+
+[[package]]
+name = "dock-bundle"
+version = "0.4.0"
+dependencies = [
+ "dock",
+ "ui-app-nxu",
+ "ui-session",
+]
+
+[[package]]
+name = "dock-preview"
+version = "0.4.0"
+dependencies = [
+ "dock",
+ "image",
 ]
 
 [[package]]
@@ -263,11 +318,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "ui-app-nxu"
+version = "0.4.0"
+dependencies = [
+ "ui-app",
+ "ui-bundle",
+ "ui-core",
+ "ui-render",
+ "ui-session",
+ "ui-text",
+]
+
+[[package]]
 name = "ui-assets"
 version = "0.4.0"
 dependencies = [
  "ui-core",
  "ui-render",
+]
+
+[[package]]
+name = "ui-bundle"
+version = "0.4.0"
+dependencies = [
+ "miniz_oxide 0.8.9",
 ]
 
 [[package]]
@@ -303,21 +377,23 @@ dependencies = [
 name = "ui-service-nxu"
 version = "0.4.0"
 dependencies = [
- "about-sevos",
  "image",
  "ui-abi",
- "ui-app",
  "ui-assets",
  "ui-core",
  "ui-login",
  "ui-platform",
  "ui-render",
+ "ui-session",
  "ui-text",
  "ui-widgets",
  "ui-window",
- "voyager",
  "windowserver-nxu",
 ]
+
+[[package]]
+name = "ui-session"
+version = "0.4.0"
 
 [[package]]
 name = "ui-support"
@@ -353,6 +429,14 @@ name = "voyager"
 version = "0.4.0"
 dependencies = [
  "ui",
+]
+
+[[package]]
+name = "voyager-bundle"
+version = "0.4.0"
+dependencies = [
+ "ui-app-nxu",
+ "voyager",
 ]
 
 [[package]]

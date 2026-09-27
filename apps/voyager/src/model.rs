@@ -21,6 +21,9 @@ pub enum EntryKind {
     Image,
     Audio,
     Document,
+    /// A folder named `<Name>.app`: an app bundle, shown with its own icon
+    /// and opened rather than entered.
+    Application,
     /// Anything not recognized by extension -- shown as a plain "File"
     /// rather than guessed at, since there is no executable-bit or
     /// content-sniffing check backing "Application"/etc. here.
@@ -34,6 +37,7 @@ impl EntryKind {
             EntryKind::Image => "Image",
             EntryKind::Audio => "Audio",
             EntryKind::Document => "Document",
+            EntryKind::Application => "Application",
             EntryKind::Other => "File",
         }
     }
@@ -45,6 +49,7 @@ impl EntryKind {
             EntryKind::Image => FileIcon::Image,
             EntryKind::Audio => FileIcon::Audio,
             EntryKind::Document => FileIcon::Document,
+            EntryKind::Application => FileIcon::Application,
             EntryKind::Other => FileIcon::Generic,
         }
     }
@@ -99,7 +104,9 @@ impl Entry {
         let name_len = name.len().min(NAME_MAX);
         name_buf[..name_len].copy_from_slice(&name.as_bytes()[..name_len]);
 
-        let kind = if raw.is_directory() {
+        let kind = if raw.is_directory() && ui::core::bundle::is_app_name(name) {
+            EntryKind::Application
+        } else if raw.is_directory() {
             EntryKind::Folder
         } else {
             EntryKind::from_extension(name)
@@ -119,6 +126,16 @@ impl Entry {
 
     pub const fn is_folder(&self) -> bool {
         matches!(self.kind, EntryKind::Folder)
+    }
+
+    pub const fn is_app(&self) -> bool {
+        matches!(self.kind, EntryKind::Application)
+    }
+
+    /// What the user sees: an app without its `.app`, as Finder shows it.
+    pub fn display_name(&self) -> &str {
+        let name = self.name();
+        if self.is_app() { &name[..name.len() - 4] } else { name }
     }
 }
 

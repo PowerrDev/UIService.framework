@@ -1,0 +1,15 @@
+[package]
+name = "about-sevos-bundle"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The executable of About sevOS.app: NXU links this archive with its userland C
+# library and AppKit.framework's main (see NXU's makedefs/apps.mk).
+[lib]
+name = "about_sevos_bundle"
+crate-type = ["staticlib"]
+
+[dependencies]
+about-sevos.workspace = true
+ui-app-nxu.workspace = true

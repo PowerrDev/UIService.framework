@@ -1,0 +1,13 @@
+[package]
+name = "ui-bundle"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# App bundles' metadata and icons: XML property lists (Info.plist), .icns
+# files (PNG inside, inflated by miniz_oxide without allocating) and scaling
+# an icon to a size. Host-testable; used by the Dock and by every app's
+# runtime (Voyager shows apps with their icons).
+
+[dependencies]
+miniz_oxide = { version = "0.8", default-features = false }

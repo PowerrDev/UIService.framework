@@ -24,6 +24,7 @@
 // sets `cfg(test)`.
 #![cfg_attr(not(test), no_std)]
 
+mod appicons;
 mod content;
 mod draw2d;
 mod icons;
@@ -250,7 +251,7 @@ impl VoyagerApp {
     fn open_enabled(&self) -> bool {
         self.selection
             .and_then(|index| self.nav.entries().get(index))
-            .is_some_and(|entry| entry.is_folder())
+            .is_some_and(|entry| entry.is_folder() || entry.is_app())
     }
 
     /// Apply a completed click. Returns whether anything visible changed.
@@ -312,8 +313,8 @@ impl VoyagerApp {
         }
     }
 
-    /// Enter the selected entry if it is a folder. No-op for a file: there
-    /// is no other app here to hand it off to.
+    /// Enter the selected entry if it is a folder, or open it if it is an
+    /// app. No-op for a file: there is no other app here to hand it off to.
     fn open_selection(&mut self) -> bool {
         let Some(index) = self.selection else {
             return false;
@@ -321,6 +322,14 @@ impl VoyagerApp {
         let Some(entry) = self.nav.entries().get(index).copied() else {
             return false;
         };
+        if entry.is_app() {
+            // An app bundle opens the app (the system launches it), as in Finder.
+            let mut buffer = [0u8; 320];
+            if let Some(path) = appicons::full_path(entry.name(), &mut buffer) {
+                ui::core::bundle::open(path);
+            }
+            return false;
+        }
         if self.nav.enter(&entry) {
             self.selection = None;
             self.scroller.reset();
@@ -332,10 +341,75 @@ impl VoyagerApp {
     }
 }
 
+// Menu commands. The Go menu's destinations are GO_DESTINATION + their
+// index in `DESTINATIONS` (a test keeps that list and this menu in step).
+const COMMAND_VIEW_LIST: u32 = 1;
+const COMMAND_VIEW_ICONS: u32 = 2;
+const COMMAND_TOGGLE_SIDEBAR: u32 = 3;
+const COMMAND_OPEN: u32 = 10;
+const COMMAND_BACK: u32 = 11;
+const COMMAND_FORWARD: u32 = 12;
+const COMMAND_GO_DESTINATION: u32 = 20;
+
+const FILE_MENU: &[MenuItem] = &[MenuItem::command("Open", COMMAND_OPEN)];
+const VIEW_MENU: &[MenuItem] = &[
+    MenuItem::command("as List", COMMAND_VIEW_LIST),
+    MenuItem::command("as Icons", COMMAND_VIEW_ICONS),
+    MenuItem::SEPARATOR,
+    MenuItem::command("Show Sidebar", COMMAND_TOGGLE_SIDEBAR),
+];
+const GO_MENU: &[MenuItem] = &[
+    MenuItem::command("Back", COMMAND_BACK),
+    MenuItem::command("Forward", COMMAND_FORWARD),
+    MenuItem::SEPARATOR,
+    MenuItem::command("System", COMMAND_GO_DESTINATION),
+    MenuItem::command("Library", COMMAND_GO_DESTINATION + 1),
+    MenuItem::command("Resources", COMMAND_GO_DESTINATION + 2),
+    MenuItem::command("Disk", COMMAND_GO_DESTINATION + 3),
+];
+
 impl App for VoyagerApp {
     const INFO: AppInfo<'static> = AppInfo::new("Voyager", "com.butterscotch.voyager", "0.1.0");
     const WINDOW: WindowConfig = WindowConfig::new(WINDOW_WIDTH, WINDOW_HEIGHT)
         .resizable(Size::new(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT), None);
+    const MENUS: &'static [Menu] = &[Menu::new("File", FILE_MENU), Menu::new("View", VIEW_MENU), Menu::new("Go", GO_MENU)];
+
+    fn menu_item_state(&self, command: u32) -> MenuItemState {
+        match command {
+            COMMAND_VIEW_LIST => MenuItemState::checked(self.view_mode == ViewMode::List),
+            COMMAND_VIEW_ICONS => MenuItemState::checked(self.view_mode == ViewMode::Grid),
+            COMMAND_TOGGLE_SIDEBAR => MenuItemState::checked(self.sidebar_visible),
+            COMMAND_OPEN => MenuItemState::enabled(self.open_enabled()),
+            COMMAND_BACK => MenuItemState::enabled(self.nav.can_go_back()),
+            COMMAND_FORWARD => MenuItemState::enabled(self.nav.can_go_forward()),
+            command if command >= COMMAND_GO_DESTINATION => {
+                MenuItemState::checked(self.current_destination == Some((command - COMMAND_GO_DESTINATION) as usize))
+            }
+            _ => MenuItemState::ENABLED,
+        }
+    }
+
+    /// The menus do what the toolbar and the sidebar do.
+    fn menu_command(&mut self, command: u32) -> AppAction {
+        let hit = match command {
+            COMMAND_VIEW_LIST => Hit::Toolbar(ToolbarHit::ViewList),
+            COMMAND_VIEW_ICONS => Hit::Toolbar(ToolbarHit::ViewGrid),
+            COMMAND_TOGGLE_SIDEBAR => Hit::Toolbar(ToolbarHit::SidebarToggle),
+            COMMAND_OPEN => Hit::Toolbar(ToolbarHit::Open),
+            COMMAND_BACK => Hit::Toolbar(ToolbarHit::Back),
+            COMMAND_FORWARD => Hit::Toolbar(ToolbarHit::Forward),
+            command if command >= COMMAND_GO_DESTINATION && ((command - COMMAND_GO_DESTINATION) as usize) < DESTINATIONS.len() => {
+                Hit::Sidebar((command - COMMAND_GO_DESTINATION) as usize)
+            }
+            _ => return AppAction::None,
+        };
+        if self.activate(hit) {
+            self.pending_redraw = PendingRedraw::Full;
+            AppAction::Redraw
+        } else {
+            AppAction::None
+        }
+    }
 
     fn draw(&mut self, ui: &mut Frame<'_>) {
         let size = ui.size();
@@ -555,5 +629,26 @@ mod tests {
         let navigator = core::mem::size_of::<Navigator>();
         assert!(app <= 1024, "VoyagerApp is {app} bytes");
         assert!(navigator <= 512, "Navigator is {navigator} bytes");
+    }
+}
+
+#[cfg(test)]
+mod menu_tests {
+    use super::*;
+
+    #[test]
+    fn go_menu_lists_every_destination_in_order() {
+        let destinations: Vec<(&str, u32)> = GO_MENU
+            .iter()
+            .filter_map(|item| match *item {
+                MenuItem::Command { title, command } if command >= COMMAND_GO_DESTINATION => Some((title, command)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(destinations.len(), DESTINATIONS.len());
+        for (index, (title, command)) in destinations.iter().enumerate() {
+            assert_eq!(*title, DESTINATIONS[index].label);
+            assert_eq!(*command, COMMAND_GO_DESTINATION + index as u32);
+        }
     }
 }

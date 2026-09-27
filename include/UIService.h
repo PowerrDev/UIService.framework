@@ -35,6 +35,8 @@
 #define UI_SERVICE_HOST_CAP_FS (1ULL << 4U)
 /* The host sends UI_SERVICE_EVENT_KEY_DOWN events (optional, any input host). */
 #define UI_SERVICE_HOST_CAP_KEYBOARD (1ULL << 5U)
+/* The host fills in UIServiceActivity through get_activity (optional, v5). */
+#define UI_SERVICE_HOST_CAP_ACTIVITY (1ULL << 6U)
 #define UI_SERVICE_HOST_CAPABILITIES_V1 (UI_SERVICE_HOST_CAP_PRESENT | UI_SERVICE_HOST_CAP_DAMAGE)
 #define UI_SERVICE_HOST_CAPABILITIES_V2 (UI_SERVICE_HOST_CAPABILITIES_V1 | UI_SERVICE_HOST_CAP_INPUT)
 #define UI_SERVICE_HOST_CAPABILITIES_V3 (UI_SERVICE_HOST_CAPABILITIES_V2 | UI_SERVICE_HOST_CAP_TIME)
@@ -153,6 +155,83 @@ typedef uint32_t (*UIServiceListDirectoryFn)(
     bool *truncated_out
 );
 
+/*
+ * What Activity Monitor shows: the machine's CPUs and memory, and one
+ * UIServiceProcessInfo per live process. Mirrored bit-for-bit by
+ * `ui_core::activity` (repr(C), same order). Every 64-bit field sits at a
+ * multiple of 8 so the layout is the same on i386, where a C uint64_t in a
+ * struct is only 4-aligned.
+ *
+ * CPU time is counted in scheduler ticks, not seconds: a process's share of
+ * the machine is how far its cpu_ticks moved against one CPU's `ticks` over
+ * the same interval (100% = one whole CPU), which needs no tick rate.
+ */
+#define UI_SERVICE_ACTIVITY_NAME_MAX 31U
+#define UI_SERVICE_ACTIVITY_CPU_MAX 8U
+
+/* UIServiceProcessInfo.state */
+#define UI_SERVICE_PROCESS_STATE_RUNNING 0U   /* one of its threads is on a CPU */
+#define UI_SERVICE_PROCESS_STATE_RUNNABLE 1U  /* ready, waiting for a CPU */
+#define UI_SERVICE_PROCESS_STATE_SLEEPING 2U  /* every thread is waiting */
+#define UI_SERVICE_PROCESS_STATE_STOPPED 3U
+#define UI_SERVICE_PROCESS_STATE_OTHER 4U     /* being created or exiting */
+
+/* UIServiceProcessInfo.flags */
+#define UI_SERVICE_PROCESS_FLAG_KERNEL (1U << 0U)
+#define UI_SERVICE_PROCESS_FLAG_SYSTEM (1U << 1U)
+
+typedef struct {
+    uint64_t uniqueid;
+    /* Scheduler ticks its live threads have run, all CPUs together. */
+    uint64_t cpu_ticks;
+    uint32_t pid;
+    uint32_t ppid;
+    uint32_t state;
+    uint32_t flags;
+    uint32_t threads;
+    /* The highest-priority (lowest-numbered) MLFQ level of its threads. */
+    uint32_t mlfq_level;
+    /* The CPU its most recently scheduled thread ran on. */
+    uint32_t last_cpu;
+    uint32_t name_length;
+    char name[UI_SERVICE_ACTIVITY_NAME_MAX + 1U];
+} UIServiceProcessInfo;
+
+typedef struct {
+    /* Scheduler ticks this CPU took, and how many found it running something. */
+    uint64_t ticks;
+    uint64_t busy_ticks;
+    uint64_t context_switches;
+    uint32_t online;
+    uint32_t reserved;
+} UIServiceCpuInfo;
+
+typedef struct {
+    uint32_t struct_size;
+    uint32_t cpu_count;
+    uint64_t uptime_us;
+    uint64_t page_size;
+    uint64_t total_pages;
+    uint64_t free_pages;
+    uint64_t heap_pages;
+    uint32_t process_count;
+    uint32_t thread_count;
+    UIServiceCpuInfo cpus[UI_SERVICE_ACTIVITY_CPU_MAX];
+} UIServiceActivity;
+
+/*
+ * Fill `activity` and up to `capacity` entries of `processes`; `*count_out`
+ * receives how many were written (activity->process_count is the total,
+ * which can be larger). Returns a UI_SERVICE_STATUS_* code.
+ */
+typedef uint32_t (*UIServiceGetActivityFn)(
+    void *context,
+    UIServiceActivity *activity,
+    UIServiceProcessInfo *processes,
+    uint32_t capacity,
+    uint32_t *count_out
+);
+
 typedef struct {
     UIServiceABIHeader header;
     uint64_t capabilities;
@@ -214,6 +293,11 @@ typedef struct {
      * error, and falls back to whatever static content it shipped with.
      */
     UIServiceListDirectoryFn list_directory;
+    /*
+     * Processes, CPUs and memory for Activity Monitor. NULL, with
+     * UI_SERVICE_HOST_CAP_ACTIVITY unset, on a host with nothing to report.
+     */
+    UIServiceGetActivityFn get_activity;
 } UIServiceHostV5;
 
 /*
@@ -277,9 +361,13 @@ uint32_t UIServiceValidateHostV3(const UIServiceHostV3 *host);
 uint32_t UIServiceValidateHostV4(const UIServiceHostV4 *host);
 uint32_t UIServiceValidateHostV5(const UIServiceHostV5 *host);
 uint32_t UIServiceHostClear(const UIServiceHostV1 *host, uint32_t xrgb8888);
-uint32_t UIServiceDrawAbout(const UIServiceHostV1 *host);
-uint32_t UIServiceRunAbout(const UIServiceHostV5 *host);
-uint32_t UIServiceRunVoyager(const UIServiceHostV5 *host);
+/*
+ * The desktop: wallpaper, menu bar, and the windows of the app processes that
+ * connect through the host kernel's UI session bridge (NXU's
+ * drivers/video/ui_service_bridge.c, which it links against); the Dock is one
+ * of them. No app is linked in. Returns only if the desktop could not start.
+ */
+uint32_t UIServiceRunDesktop(const UIServiceHostV5 *host);
 /*
  * Fullscreen setup (first boot: welcome, then create a passcode) or login.
  * Returns UI_SERVICE_STATUS_OK only once the passcode was accepted (or set);

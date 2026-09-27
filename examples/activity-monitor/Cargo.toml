@@ -1,0 +1,9 @@
+[package]
+name = "activity-monitor-preview"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ui.workspace = true
+activity-monitor.workspace = true

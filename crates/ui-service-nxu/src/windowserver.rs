@@ -64,6 +64,11 @@ unsafe extern "C" {
     fn WS_Present() -> bool;
 
     fn WS_Set_Cursor_Kind(kind: u32) -> bool;
+
+    fn WS_Set_Window_Shadow(window_id: u32, style: u32) -> bool;
+    fn WS_Set_Window_Key(window_id: u32, key: bool) -> bool;
+    fn WS_Set_Window_Opaque_Interior(window_id: u32, opaque_interior: bool) -> bool;
+    fn WS_Set_Shadow_Scale(permille: u32);
 }
 
 /// What the pointer shows -- mirrors `windowserver::CursorKind` numerically
@@ -186,6 +191,32 @@ pub(crate) fn Render_Window(
             stride,
         )
     }
+}
+
+/// The shadow a window casts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Shadow {
+    /// Small and tight: menus, the Dock, the Dock's name bubble.
+    Popup,
+}
+
+pub(crate) fn Set_Window_Shadow(id: WindowId, shadow: Shadow) -> bool {
+    unsafe { WS_Set_Window_Shadow(id.get(), match shadow { Shadow::Popup => 1 }) }
+}
+
+/// Opaque everywhere but its rounded corners (an app window).
+pub(crate) fn Set_Window_Opaque_Interior(id: WindowId) -> bool {
+    unsafe { WS_Set_Window_Opaque_Interior(id.get(), true) }
+}
+
+/// The key window casts the darker shadow.
+pub(crate) fn Set_Window_Key(id: WindowId, key: bool) -> bool {
+    unsafe { WS_Set_Window_Key(id.get(), key) }
+}
+
+/// Shadows are sized in points: tell WindowServer the display's density.
+pub(crate) fn Set_Shadow_Scale(permille: u32) {
+    unsafe { WS_Set_Shadow_Scale(permille) }
 }
 
 pub(crate) fn Present() -> bool {

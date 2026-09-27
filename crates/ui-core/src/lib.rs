@@ -163,6 +163,237 @@ pub mod fs {
     }
 }
 
+/// Processes, CPUs and memory, provided by the host when it reports
+/// `UI_SERVICE_HOST_CAP_ACTIVITY` -- what Activity Monitor shows. Wired up
+/// once at connect time, like [`fs`].
+///
+/// CPU time is in scheduler ticks: a process's share over an interval is how
+/// far its `cpu_ticks` moved against one CPU's `ticks` (100 = one whole CPU),
+/// so nothing here needs to know the host's tick rate.
+pub mod activity {
+    use core::ffi::c_void;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    pub const NAME_MAX: usize = 31;
+    pub const CPU_MAX: usize = 8;
+
+    pub const STATE_RUNNING: u32 = 0;
+    pub const STATE_RUNNABLE: u32 = 1;
+    pub const STATE_SLEEPING: u32 = 2;
+    pub const STATE_STOPPED: u32 = 3;
+    pub const STATE_OTHER: u32 = 4;
+
+    pub const FLAG_KERNEL: u32 = 1 << 0;
+    pub const FLAG_SYSTEM: u32 = 1 << 1;
+
+    /// `UIServiceProcessInfo` (UIService.h), bit for bit.
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct ProcessInfo {
+        pub uniqueid: u64,
+        pub cpu_ticks: u64,
+        pub pid: u32,
+        pub ppid: u32,
+        pub state: u32,
+        pub flags: u32,
+        pub threads: u32,
+        pub mlfq_level: u32,
+        pub last_cpu: u32,
+        name_length: u32,
+        name: [u8; NAME_MAX + 1],
+    }
+
+    impl ProcessInfo {
+        pub const fn empty() -> Self {
+            Self {
+                uniqueid: 0,
+                cpu_ticks: 0,
+                pid: 0,
+                ppid: 0,
+                state: STATE_OTHER,
+                flags: 0,
+                threads: 0,
+                mlfq_level: 0,
+                last_cpu: 0,
+                name_length: 0,
+                name: [0; NAME_MAX + 1],
+            }
+        }
+
+        /// For hosts written in Rust (previews, tests).
+        pub fn with_name(mut self, name: &str) -> Self {
+            let length = name.len().min(NAME_MAX);
+            self.name[..length].copy_from_slice(&name.as_bytes()[..length]);
+            self.name[length] = 0;
+            self.name_length = length as u32;
+            self
+        }
+
+        pub fn name(&self) -> &str {
+            let length = (self.name_length as usize).min(NAME_MAX);
+            match core::str::from_utf8(&self.name[..length]) {
+                Ok(name) => name,
+                // Cut in the middle of a character: keep the whole ones.
+                Err(error) => core::str::from_utf8(&self.name[..error.valid_up_to()]).unwrap_or(""),
+            }
+        }
+
+        pub const fn is_kernel(&self) -> bool {
+            self.flags & FLAG_KERNEL != 0
+        }
+    }
+
+    /// `UIServiceCpuInfo`.
+    #[repr(C)]
+    #[derive(Clone, Copy, Default)]
+    pub struct CpuInfo {
+        pub ticks: u64,
+        pub busy_ticks: u64,
+        pub context_switches: u64,
+        pub online: u32,
+        pub reserved: u32,
+    }
+
+    /// `UIServiceActivity`.
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct Activity {
+        pub struct_size: u32,
+        pub cpu_count: u32,
+        pub uptime_us: u64,
+        pub page_size: u64,
+        pub total_pages: u64,
+        pub free_pages: u64,
+        pub heap_pages: u64,
+        pub process_count: u32,
+        pub thread_count: u32,
+        pub cpus: [CpuInfo; CPU_MAX],
+    }
+
+    impl Activity {
+        pub const fn empty() -> Self {
+            Self {
+                struct_size: core::mem::size_of::<Self>() as u32,
+                cpu_count: 0,
+                uptime_us: 0,
+                page_size: 0,
+                total_pages: 0,
+                free_pages: 0,
+                heap_pages: 0,
+                process_count: 0,
+                thread_count: 0,
+                cpus: [CpuInfo { ticks: 0, busy_ticks: 0, context_switches: 0, online: 0, reserved: 0 }; CPU_MAX],
+            }
+        }
+    }
+
+    // The C side has the same numbers (see UIService.h's layout note).
+    const _: () = assert!(core::mem::size_of::<ProcessInfo>() == 80);
+    const _: () = assert!(core::mem::size_of::<CpuInfo>() == 32);
+    const _: () = assert!(core::mem::size_of::<Activity>() == 56 + 32 * CPU_MAX);
+
+    #[derive(Debug, Clone, Copy, Eq, PartialEq)]
+    pub enum Error {
+        /// No host, or one without `UI_SERVICE_HOST_CAP_ACTIVITY`.
+        Unavailable,
+        Failed,
+    }
+
+    /// Matches `UIServiceGetActivityFn` in UIService.h.
+    pub type RawGetActivityFn = unsafe extern "C" fn(
+        context: *mut c_void,
+        activity: *mut Activity,
+        processes: *mut ProcessInfo,
+        capacity: u32,
+        count_out: *mut u32,
+    ) -> u32;
+
+    static CONTEXT: AtomicUsize = AtomicUsize::new(0);
+    static FUNCTION: AtomicUsize = AtomicUsize::new(0);
+
+    /// Wire up the host's callback. Called from
+    /// `ui_platform::InteractiveHostV5::connect` (or a preview's own fake).
+    pub fn set_backend(context: *mut c_void, function: Option<RawGetActivityFn>) {
+        CONTEXT.store(context as usize, Ordering::Relaxed);
+        FUNCTION.store(function.map_or(0, |f| f as usize), Ordering::Relaxed);
+    }
+
+    pub fn available() -> bool {
+        FUNCTION.load(Ordering::Relaxed) != 0
+    }
+
+    /// Take a sample: fills `activity` and the front of `processes`, and
+    /// returns how many processes were written.
+    pub fn sample(activity: &mut Activity, processes: &mut [ProcessInfo]) -> Result<usize, Error> {
+        let function_addr = FUNCTION.load(Ordering::Relaxed);
+        if function_addr == 0 {
+            return Err(Error::Unavailable);
+        }
+
+        // SAFETY: only `set_backend` stores here, always a real function.
+        let function: RawGetActivityFn = unsafe { core::mem::transmute(function_addr) };
+        let context = CONTEXT.load(Ordering::Relaxed) as *mut c_void;
+
+        activity.struct_size = core::mem::size_of::<Activity>() as u32;
+        let mut count: u32 = 0;
+        let status = unsafe {
+            function(context, activity, processes.as_mut_ptr(), processes.len() as u32, &mut count)
+        };
+
+        if status != 0 {
+            return Err(Error::Failed);
+        }
+        Ok((count as usize).min(processes.len()))
+    }
+}
+
+/// App bundles (`/Applications/<Name>.app`), for apps that show or open
+/// them (Voyager): an app's icon, and asking the system to open one. Wired
+/// up once by the app's runtime, like [`fs`]; unavailable (every call answers
+/// `false`) where nothing was wired.
+pub mod bundle {
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    /// Fill `pixels` (`size` x `size`, `0xAARRGGBB`, straight alpha) with the
+    /// icon of the bundle at `path`. False when it has none or it will not load.
+    pub type RawAppIconFn = fn(path: &str, size: u32, pixels: &mut [u32]) -> bool;
+    /// Open (launch, or bring forward) the app bundle at `path`.
+    pub type RawOpenFn = fn(path: &str) -> bool;
+
+    static ICON: AtomicUsize = AtomicUsize::new(0);
+    static OPEN: AtomicUsize = AtomicUsize::new(0);
+
+    pub fn set_backend(icon: Option<RawAppIconFn>, open: Option<RawOpenFn>) {
+        ICON.store(icon.map_or(0, |f| f as usize), Ordering::Relaxed);
+        OPEN.store(open.map_or(0, |f| f as usize), Ordering::Relaxed);
+    }
+
+    /// Whether `name` is an app bundle's (a folder whose name ends in `.app`).
+    pub fn is_app_name(name: &str) -> bool {
+        name.len() > 4 && name[name.len() - 4..].eq_ignore_ascii_case(".app")
+    }
+
+    pub fn app_icon(path: &str, size: u32, pixels: &mut [u32]) -> bool {
+        let function = ICON.load(Ordering::Relaxed);
+        if function == 0 || pixels.len() < size as usize * size as usize {
+            return false;
+        }
+        // SAFETY: only `set_backend` stores here, always a real function.
+        let function: RawAppIconFn = unsafe { core::mem::transmute(function) };
+        function(path, size, pixels)
+    }
+
+    pub fn open(path: &str) -> bool {
+        let function = OPEN.load(Ordering::Relaxed);
+        if function == 0 {
+            return false;
+        }
+        // SAFETY: as above.
+        let function: RawOpenFn = unsafe { core::mem::transmute(function) };
+        function(path)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Point {
     pub x: i32,

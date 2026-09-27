@@ -19,6 +19,10 @@
 #[cfg(test)]
 extern crate std;
 
+mod bootstrap;
+
+pub use bootstrap::BootstrapText;
+
 use ttf_parser::{Face, GlyphId, OutlineBuilder};
 use ui_core::{Color, Point, Size};
 use ui_render::{Canvas, TextRenderer};

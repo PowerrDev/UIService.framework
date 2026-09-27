@@ -15,21 +15,20 @@ pub struct WindowStyle {
 }
 
 impl WindowStyle {
-    // 56/22, not a real Aqua window's 28pt titlebar and 11pt corner radius at
-    // 1x: this canvas is physical-pixel (2x) density, so chrome metrics need
-    // twice the real point value to land at the same on-screen size (see
-    // about-sevos/src/panel.rs). corner_radius is a further deliberate 20%
-    // increase on top of that (19pt-equivalent at 1x, up from 16pt) for a
-    // visibly rounder window than the plain doubled value would give. Note
-    // that what is drawn is `Window::corner_radius()`, which caps this at the
-    // titlebar's height (and half the window): the 256 here effectively means
-    // "as round as the titlebar allows", the same at the top and the bottom.
+    // Physical-pixel (2x) density, so chrome metrics are twice the real
+    // point value to land at the same on-screen size (see
+    // about-sevos/src/panel.rs): a 32pt titlebar and a 12pt corner radius.
+    // What is drawn is `Window::corner_radius()`, which also keeps the curve
+    // inside the titlebar (and half the window). The radius used to say 256,
+    // "as round as the titlebar allows", while the corner curve itself was
+    // off by a pixel and cut barely a few pixels whatever the radius; with
+    // the curve right, 12pt is the look that was meant.
     pub const DEFAULT: Self = Self {
         background: system_color::WINDOW_BACKGROUND,
         titlebar: system_color::TITLEBAR,
         border: Color::rgb(190, 192, 198),
         titlebar_height: 64,
-        corner_radius: 256,
+        corner_radius: 24,
     };
 }
 
@@ -122,7 +121,10 @@ impl Window {
     /// no longer match itself.
     pub fn corner_radius(&self) -> u32 {
         let radius = self.style.corner_radius.min(self.frame.size.width / 2).min(self.frame.size.height / 2);
-        if self.style.titlebar_height > 0 { radius.min(self.style.titlebar_height) } else { radius }
+        // The top corners are drawn in the titlebar band, and a corner's
+        // curve runs one and a half radii along the edge
+        // (`ui_render::corner_extent`): it has to end inside the band.
+        if self.style.titlebar_height > 0 { radius.min(self.style.titlebar_height * 2 / 3) } else { radius }
     }
 
     pub const fn is_dragging(&self) -> bool {
@@ -363,14 +365,13 @@ impl Window {
 /// outside its `radius` corners -- exactly the test `Surface::fill_rounded_rect`
 /// uses, so a corner cut here lines up pixel for pixel with one drawn there.
 fn outside_corner(x: i32, y: i32, width: i32, height: i32, radius: i32) -> bool {
-    if radius <= 0 {
-        return x < 0 || y < 0 || x >= width || y >= height;
+    if x < 0 || y < 0 || x >= width || y >= height {
+        return true;
     }
-    let nearest_x = if x < radius { radius - 1 } else if x >= width - radius { width - radius } else { x };
-    let nearest_y = if y < radius { radius - 1 } else if y >= height - radius { height - radius } else { y };
-    let dx = (x - nearest_x) as i64;
-    let dy = (y - nearest_y) as i64;
-    dx.pow(4) + dy.pow(4) > (radius as i64).pow(4)
+    let extent = ui_render::corner_extent(radius.max(0) as u32, width as u32, height as u32);
+    let row = y.min(height - 1 - y) as u32;
+    let column = x.min(width - 1 - x) as u32;
+    column < ui_render::corner_inset(row, extent)
 }
 
 impl Window {
@@ -395,26 +396,28 @@ impl Window {
         let top = self.style.titlebar_height.min(self.frame.size.height) as i32;
         let radius = self.corner_radius() as i32;
         let inner_radius = (radius - 1).max(0);
+        // How far the curve reaches along each edge (see `ui_render::corner_extent`).
+        let extent = ui_render::corner_extent(radius as u32, width as u32, height as u32) as i32;
         let border = self.style.border;
         let pixel = |canvas: &mut C, x: i32, y: i32, color: Color| {
             canvas.fill_rect(Rect::new(origin.x + x, origin.y + y, 1, 1), color);
         };
 
         // Straight edges, between the titlebar and the bottom corners.
-        let corner_top = (height - radius).max(top);
+        let corner_top = (height - extent).max(top);
         if corner_top > top {
             let length = (corner_top - top) as u32;
             canvas.fill_rect(Rect::new(origin.x, origin.y + top, 1, length), border);
             canvas.fill_rect(Rect::new(origin.x + width - 1, origin.y + top, 1, length), border);
         }
-        if width > radius * 2 {
-            canvas.fill_rect(Rect::new(origin.x + radius, origin.y + height - 1, (width - radius * 2) as u32, 1), border);
+        if width > extent * 2 {
+            canvas.fill_rect(Rect::new(origin.x + extent, origin.y + height - 1, (width - extent * 2) as u32, 1), border);
         }
 
         // The two bottom corners: outside the outer curve is not window at
         // all; between it and the inner curve is border.
         for y in corner_top..height {
-            for x in (0..radius.min(width)).chain((width - radius).max(radius)..width) {
+            for x in (0..extent.min(width)).chain((width - extent).max(extent)..width) {
                 if outside_corner(x, y, width, height, radius) {
                     pixel(canvas, x, y, outside);
                 } else if x == 0 || x == width - 1 || y == height - 1
@@ -486,7 +489,7 @@ mod tests {
     fn the_radius_never_exceeds_what_the_titlebar_can_show() {
         let style = WindowStyle { titlebar_height: 32, corner_radius: 256, ..WindowStyle::DEFAULT };
         let window = Window::new(Rect::new(0, 0, 800, 600), style);
-        assert_eq!(window.corner_radius(), 32);
+        assert_eq!(window.corner_radius(), 21);
         let small = Window::new(Rect::new(0, 0, 40, 20), style);
         assert_eq!(small.corner_radius(), 10);
     }

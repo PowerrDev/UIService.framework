@@ -1,8 +1,7 @@
 #![allow(non_snake_case)]
 
-use ui_core::{scale::pt, system_color, Color, Point, Rect, Size};
-use ui_render::{Canvas, TextRenderer};
-use ui_window::Window;
+use ui_core::{scale::pt, Color, Point, Rect, Size};
+use ui_render::Canvas;
 
 pub(crate) const TRANSPARENT_KEY: u32 = 0x00FF00FF;
 
@@ -19,49 +18,15 @@ const DESKTOP_OFF_WHITE: Color = Color::rgb(245, 244, 240);
 
 // Real Aqua's menu bar is 24pt at 1x; this one runs a step above that (30pt
 // equivalent) since the first pass at 24pt-equivalent read as too small.
-// Values below are all 1x design points, converted to physical pixels for
-// the host's actual content scale through `ui_core::scale::pt` instead of
-// a hardcoded 2x (see `ui_window::WindowStyle::DEFAULT` and
-// `about-sevos/src/panel.rs` for the same convention).
-fn menubar_height() -> u32 {
+// Values are 1x design points, converted to physical pixels for the host's
+// actual content scale through `ui_core::scale::pt` (see menubar.rs, which
+// draws the bar itself).
+pub(crate) fn menubar_height() -> u32 {
     pt(30)
 }
-const MENUBAR_BACKGROUND: Color = system_color::MENUBAR;
-const MENUBAR_BORDER: Color = Color::rgb(210, 210, 206);
-// Menu titles and the clock are full-strength labels, as on macOS: they all
-// work, and a muted grey (the old 110,112,118, 4.26:1 here) reads as
-// disabled -- as well as falling below the 4.5:1 text minimum.
-const MENUBAR_TEXT: Color = system_color::LABEL;
-fn menubar_padding() -> i32 {
-    pt(8) as i32
-}
-fn menubar_logo_gap() -> i32 {
-    pt(6) as i32
-}
-fn menubar_title_point_size() -> u32 {
-    pt(15)
-}
-fn menubar_option_point_size() -> u32 {
-    pt(13)
-}
-fn menubar_option_gap() -> i32 {
-    pt(13) as i32
-}
-const MENUBAR_OPTIONS: [&str; 3] = ["File", "Edit", "Help"];
 
-mod generated_logo {
+pub(crate) mod generated_logo {
     include!(concat!(env!("OUT_DIR"), "/ui_menubar_logo.rs"));
-}
-
-/// Center a new window within the desktop, reserving the menu bar strip at
-/// the top the same way a real system's windows never open underneath it.
-pub(crate) fn centered_window(surface_size: Size, size: Size, style: ui_window::WindowStyle) -> Window {
-    let content_top = menubar_height().min(surface_size.height);
-    let available_height = surface_size.height - content_top;
-
-    let x = ((surface_size.width.saturating_sub(size.width)) / 2) as i32;
-    let y = content_top as i32 + ((available_height.saturating_sub(size.height)) / 2) as i32;
-    Window::new(Rect::new(x, y, size.width, size.height), style)
 }
 
 fn lerp_channel(start: u8, end: u8, amount: u32, extent: u32) -> u8 {
@@ -176,7 +141,7 @@ fn color_from_argb8888(value: u32) -> Color {
 
 /// Alpha-blend the embedded, build-time-fitted menu bar logo at `origin`.
 /// No-op when no logo asset was embedded at build time.
-fn draw_logo<C: Canvas>(canvas: &mut C, origin: Point) {
+pub(crate) fn draw_logo<C: Canvas>(canvas: &mut C, origin: Point) {
     use generated_logo::{LOGO_DATA, LOGO_SIZE};
 
     for y in 0..LOGO_SIZE {
@@ -196,95 +161,8 @@ fn draw_logo<C: Canvas>(canvas: &mut C, origin: Point) {
     }
 }
 
-/// Draw the system menu bar: `<Logo> <AppName> <AppOptions>` on the left,
-/// `<OtherInfo>` (currently a live UTC clock, when the host reports one)
-/// flush right.
-pub(crate) fn UIDrawMenuBar<C: Canvas, T: TextRenderer>(
-    canvas: &mut C,
-    text: &mut T,
-    app_name: &str,
-    other_info: &str,
-) {
-    let size = canvas.size();
-    let bar_height = menubar_height().min(size.height);
-    canvas.fill_rect(Rect::new(0, 0, size.width, bar_height), MENUBAR_BACKGROUND);
-    canvas.fill_rect(
-        Rect::new(0, bar_height as i32 - 1, size.width, 1),
-        MENUBAR_BORDER,
-    );
-
-    let mut cursor = menubar_padding();
-
-    let logo_size = generated_logo::LOGO_SIZE as i32;
-    if logo_size > 0 {
-        let logo_y = (bar_height as i32 - logo_size) / 2;
-        draw_logo(canvas, Point::new(cursor, logo_y));
-        cursor += logo_size + menubar_logo_gap();
-    }
-
-    let title_point_size = menubar_title_point_size();
-    let option_point_size = menubar_option_point_size();
-    let option_gap = menubar_option_gap();
-
-    let name_measured = text.measure(app_name, title_point_size, true);
-    let name_y = (bar_height as i32 - name_measured.height as i32) / 2;
-    text.draw(
-        canvas,
-        Point::new(cursor, name_y),
-        app_name,
-        MENUBAR_TEXT,
-        title_point_size,
-        true,
-    );
-    cursor += name_measured.width as i32 + option_gap;
-
-    for option in MENUBAR_OPTIONS {
-        let measured = text.measure(option, option_point_size, false);
-        let option_y = (bar_height as i32 - measured.height as i32) / 2;
-        text.draw(
-            canvas,
-            Point::new(cursor, option_y),
-            option,
-            MENUBAR_TEXT,
-            option_point_size,
-            false,
-        );
-        cursor += measured.width as i32 + option_gap;
-    }
-
-    if !other_info.is_empty() {
-        let measured = text.measure(other_info, option_point_size, false);
-        let padding = menubar_padding();
-        let x = size.width as i32 - padding - measured.width as i32;
-        let y = (bar_height as i32 - measured.height as i32) / 2;
-
-        // Skip it rather than overlap the app options on a very narrow
-        // display -- a missing clock beats a garbled one.
-        if x > cursor {
-            text.draw(
-                canvas,
-                Point::new(x, y),
-                other_info,
-                MENUBAR_TEXT,
-                option_point_size,
-                false,
-            );
-        }
-    }
-}
-
-pub(crate) fn UIDrawDesktop<C: Canvas, T: TextRenderer>(
-    canvas: &mut C,
-    text: &mut T,
-    app_name: &str,
-    other_info: &str,
-) {
-    UIDrawWallpaper(canvas);
-    UIDrawMenuBar(canvas, text, app_name, other_info);
-}
-
-/// The desktop wallpaper alone, without the menu bar: what the login screen
-/// blurs behind itself.
+/// The desktop wallpaper alone, without the menu bar: what the desktop draws
+/// once under everything, and what the login screen blurs behind itself.
 pub(crate) fn UIDrawWallpaper<C: Canvas>(canvas: &mut C) {
     let size = canvas.size();
 

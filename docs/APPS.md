@@ -73,6 +73,38 @@ Return values:
 - `AppAction::Redraw` — rebuild the app backing store and present it;
 - `AppAction::Close` — ask the runtime to end the app session.
 
+## Menus
+
+While an app is frontmost the menu bar shows its name (Hide, Quit, ...), then
+its own menus, then Window. Declare them as a constant and answer two calls:
+
+```rust
+const VIEW: &[MenuItem] = &[
+    MenuItem::command("as List", 1),
+    MenuItem::command("as Icons", 2),
+    MenuItem::SEPARATOR,
+    MenuItem::command("Refresh", 3),
+];
+
+impl App for Shark {
+    const MENUS: &'static [Menu] = &[Menu::new("View", VIEW)];
+
+    // Asked each time a menu opens: greyed out, check mark.
+    fn menu_item_state(&self, command: u32) -> MenuItemState {
+        match command {
+            1 => MenuItemState::checked(self.list),
+            2 => MenuItemState::checked(!self.list),
+            _ => MenuItemState::ENABLED,
+        }
+    }
+
+    fn menu_command(&mut self, command: u32) -> AppAction {
+        // ... same as the matching toolbar button
+        AppAction::Redraw
+    }
+}
+```
+
 ## Window configuration
 
 A fixed standard window is one line:
@@ -120,17 +152,16 @@ Do not add app-specific branches to widgets, renderers or NXU host code. If an
 app needs a reusable capability, promote that capability into a framework crate
 with an app-neutral API.
 
-## Current limitation
+## Running on NXU
 
-The current NXU path statically embeds About sevOS for early graphical
-bring-up. `ui-service-nxu::runtime` is already generic over `App`, so the app
-contract is no longer About-specific, but arbitrary app loading/processes are a
-future userspace task.
+Apps are processes: `.app executable → ui-app-nxu → NXU UI session calls →
+the desktop`. To ship one, add `bundles/<app>` (a staticlib calling
+`ui_app_nxu::run("/Applications/<Name>.app", <App>::new)`), list it in
+`NXU_BUNDLES` in the Makefile, and give it a bundle on NXU's side (NXU's
+`doc/apps-and-dock.md`, "Adding an app"). `apps/dock` is the Dock's logic
+(property lists, `.icns` icons, layout, drawing; host-tested), and
+`examples/dock` renders it with real icons:
 
-The intended direction is:
-
-```text
-.app executable → UIService client API → UIService/WindowServer → NXU
+```sh
+cargo run --offline --release -p dock-preview -- OUT.png 2000 assets/Backgrounds/DefaultWallpaper.jpg ICNS...
 ```
-
-not one exported kernel function per application.

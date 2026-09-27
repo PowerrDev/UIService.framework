@@ -44,7 +44,13 @@ transfer/flush presentation.
 
 ## Current app bootstrap
 
-NXU currently calls `UIServiceRunAbout`. That exported entry point is only a
-bootstrap registration point; the actual runtime is generic over `ui_app::App`.
-This avoids duplicating a `RunWhatever` implementation for each future app and
-keeps the eventual userspace app loader as a separate problem.
+NXU calls `UIServiceRunDesktop`: the wallpaper, the menu bar and nothing
+else. No app is linked in. Apps are processes in `/Applications/<Name>.app`
+that NXU's Dock starts; each runs `crates/ui-app-nxu` (an archive from
+`bundles/<app>`, built by `make nxu-apps` / `nxu-apps-i386`) and puts its
+window on the desktop through NXU's UI session system calls. The desktop's
+side is `bridge.rs` (the kernel's `ui_bridge_*` functions, called by symbol
+like `timer_get_microseconds`), `remote.rs` (an app's window) and
+`dockhost.rs` (the Dock's). The ABI is `crates/ui-session`, the mirror of
+NXU's `kern/syscall/ui_session_defs.h`; NXU's `doc/apps-and-dock.md` has the
+whole picture.

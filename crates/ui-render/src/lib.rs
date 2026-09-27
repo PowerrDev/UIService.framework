@@ -4,6 +4,39 @@
 
 use ui_core::{Color, Point, Rect, Size};
 
+/// How far along each edge a rounded corner of `radius` reaches in a
+/// `width` x `height` rectangle.
+///
+/// The corners are squircles (a quartic superellipse, the usual cheap
+/// stand-in for Apple's continuous corners), and a quartic cuts much less
+/// off a corner than a circle of the same size: spread over `radius` alone
+/// it read as barely rounded. Over one and a half times the radius it cuts
+/// about as deep as a circle of `radius` would, with the smoother run-in.
+pub fn corner_extent(radius: u32, width: u32, height: u32) -> u32 {
+    (radius + radius / 2).min(width / 2).min(height / 2)
+}
+
+/// Pixels a corner reaching `extent` cuts from the side of the row `row`
+/// pixels in from the top or bottom edge (0 is the outermost row).
+///
+/// Pixel centres against the curve: in doubled coordinates the corner's
+/// centre is `2 * extent` in from both edges and pixel `i`'s centre is
+/// `2 * i + 1`, so the curve meets each edge exactly `extent` pixels from
+/// the corner. Integer only: these targets have no FPU.
+pub fn corner_inset(row: u32, extent: u32) -> u32 {
+    if row >= extent {
+        return 0;
+    }
+    let reach = 2 * extent as i64;
+    let reach4 = reach.pow(4);
+    let dy4 = (reach - (2 * row as i64 + 1)).pow(4);
+    let mut inset = 0;
+    while inset < extent && (reach - (2 * inset as i64 + 1)).pow(4) + dy4 > reach4 {
+        inset += 1;
+    }
+    inset
+}
+
 pub trait Canvas {
     fn size(&self) -> Size;
     fn fill(&mut self, color: Color);
@@ -62,46 +95,16 @@ pub trait Canvas {
             return;
         }
 
-        let radius = radius.min(rect.size.width / 2).min(rect.size.height);
-        if radius == 0 {
-            self.fill_rect(rect, color);
-            return;
-        }
-
-        let radius_i = radius as i32;
-        let width_i = rect.size.width as i32;
-
-        // Everything below the rounded band, and the flat middle of the
-        // band itself, fill solid -- only the two top corners need the
-        // per-pixel curve test below.
-        self.fill_rect(
-            Rect::new(rect.origin.x, rect.origin.y + radius_i, rect.size.width, rect.size.height - radius),
-            color,
-        );
-        self.fill_rect(
-            Rect::new(rect.origin.x + radius_i, rect.origin.y, rect.size.width - radius * 2, radius),
-            color,
-        );
-
-        // Deliberately not anti-aliased -- see `fill_rounded_rect` for why a
-        // blended edge pixel would corrupt this surface's color-key
-        // transport to WindowServer.
-        let radius_pow4 = (radius_i as i64).pow(4);
-        let nearest_y = radius_i - 1;
-
-        for local_y in 0..radius_i {
-            let dy = (local_y - nearest_y) as i64;
-
-            for local_x in (0..radius_i).chain((width_i - radius_i)..width_i) {
-                let nearest_x = if local_x < radius_i { radius_i - 1 } else { width_i - radius_i };
-                let dx = (local_x - nearest_x) as i64;
-                if dx.pow(4) + dy.pow(4) > radius_pow4 {
-                    continue;
-                }
-
-                let px = rect.origin.x + local_x;
-                let py = rect.origin.y + local_y;
-                self.blend_pixel(Point::new(px, py), color.with_alpha(255));
+        // The top corners only: the band's height is not halved, its bottom
+        // edge is straight.
+        let extent = corner_extent(radius, rect.size.width, rect.size.height * 2);
+        for row in 0..rect.size.height {
+            // Deliberately not anti-aliased -- see `fill_rounded_rect` for
+            // why a blended edge pixel would corrupt this surface's
+            // color-key transport to WindowServer.
+            let inset = corner_inset(row, extent);
+            if rect.size.width > inset * 2 {
+                self.fill_rect(Rect::new(rect.origin.x + inset as i32, rect.origin.y + row as i32, rect.size.width - inset * 2, 1), color);
             }
         }
     }
@@ -159,14 +162,6 @@ impl<'a> Surface<'a> {
         }
 
         Some(y as usize * self.stride as usize + x as usize)
-    }
-
-    fn set_pixel(&mut self, x: i32, y: i32, color: Color) {
-        let Some(index) = self.pixel_index(x, y) else {
-            return;
-        };
-
-        self.pixels[index] = color.to_xrgb8888();
     }
 
     pub fn blit_xrgb(&mut self, origin: Point, source: &[u32], width: u32, height: u32, stride: u32) {
@@ -283,54 +278,23 @@ impl Canvas for Surface<'_> {
             return;
         }
 
-        let radius = radius.min(rect.size.width / 2).min(rect.size.height / 2);
-        if radius == 0 {
-            self.fill_rect(rect, color);
-            return;
-        }
-
-        let radius_i = radius as i32;
-
-        // Squircle corners (Apple's "continuous corner" look), not a plain
-        // circular arc: a quartic superellipse (dx^4 + dy^4 <= r^4) is the
-        // standard cheap approximation of that continuous curvature. It's
-        // pure integer power -- no pow(f64)/sqrt/soft-float, since this
-        // target has no hardware FPU (aarch64-unknown-none-softfloat).
+        // Squircle corners (see `corner_extent`). Deliberately NOT
+        // anti-aliased: this window surface is transported to WindowServer
+        // via an exact-match color key, not a real alpha channel (see
+        // `WS_Render_Window`'s `transparent_key`), so a partially-blended
+        // edge pixel would round-trip as some other RGB value that fails the
+        // key match and comes back fully OPAQUE -- a visible off-color fringe
+        // right at the curve, worse than a one-pixel-hard edge.
         //
-        // Deliberately NOT anti-aliased: this window surface is transported
-        // to WindowServer via an exact-match color key, not a real alpha
-        // channel (see `WS_Render_Window`'s `transparent_key`), so a
-        // partially-blended edge pixel would round-trip as some other RGB
-        // value that fails the key match and comes back fully OPAQUE -- a
-        // visible off-color fringe right at the curve, worse than a
-        // one-pixel-hard edge.
-        let radius_pow4 = (radius_i as i64).pow(4);
-
-        for local_y in 0..rect.size.height as i32 {
-            for local_x in 0..rect.size.width as i32 {
-                let nearest_x = if local_x < radius_i {
-                    radius_i - 1
-                } else if local_x >= rect.size.width as i32 - radius_i {
-                    rect.size.width as i32 - radius_i
-                } else {
-                    local_x
-                };
-
-                let nearest_y = if local_y < radius_i {
-                    radius_i - 1
-                } else if local_y >= rect.size.height as i32 - radius_i {
-                    rect.size.height as i32 - radius_i
-                } else {
-                    local_y
-                };
-
-                let dx = (local_x - nearest_x) as i64;
-                let dy = (local_y - nearest_y) as i64;
-                if dx.pow(4) + dy.pow(4) > radius_pow4 {
-                    continue;
-                }
-
-                self.set_pixel(rect.origin.x + local_x, rect.origin.y + local_y, color);
+        // Each row is one solid span, cut in by the same number of pixels on
+        // both sides, so the curve is worked out once per row and the span is
+        // one fill.
+        let extent = corner_extent(radius, rect.size.width, rect.size.height);
+        let height = rect.size.height;
+        for row in 0..height {
+            let inset = corner_inset(row.min(height - 1 - row), extent);
+            if rect.size.width > inset * 2 {
+                self.fill_rect(Rect::new(rect.origin.x + inset as i32, rect.origin.y + row as i32, rect.size.width - inset * 2, 1), color);
             }
         }
     }
@@ -422,4 +386,62 @@ pub trait TextRenderer {
         point_size: u32,
         semibold: bool,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The curve, tested pixel by pixel: pixel centres against a quartic
+    /// whose centre sits `extent` in from both edges.
+    fn inside(x: i32, y: i32, width: i32, height: i32, extent: i32) -> bool {
+        let fold = |v: i32, size: i32| (v.min(size - 1 - v) * 2 + 1) as i64;
+        let reach = 2 * extent as i64;
+        let (dx, dy) = ((reach - fold(x, width)).max(0), (reach - fold(y, height)).max(0));
+        dx.pow(4) + dy.pow(4) <= reach.pow(4)
+    }
+
+    #[test]
+    fn rounded_rect_spans_match_the_per_pixel_curve() {
+        for (width, height, radius) in [(40u32, 30u32, 10u32), (21, 21, 10), (64, 12, 6), (9, 40, 4), (33, 33, 1)] {
+            let (full_width, full_height) = (width + 6, height + 6);
+            let mut pixels = [0u32; 80 * 80];
+            let mut surface = Surface::new(&mut pixels, full_width, full_height, full_width).unwrap();
+            surface.fill_rounded_rect(Rect::new(3, 3, width, height), radius, Color::rgb(255, 255, 255));
+
+            let extent = corner_extent(radius, width, height) as i32;
+            for y in 0..full_height as i32 {
+                for x in 0..full_width as i32 {
+                    let (local_x, local_y) = (x - 3, y - 3);
+                    let expected = local_x >= 0 && local_y >= 0 && local_x < width as i32 && local_y < height as i32
+                        && inside(local_x, local_y, width as i32, height as i32, extent);
+                    let painted = pixels[(y as u32 * full_width + x as u32) as usize] != 0;
+                    assert_eq!(painted, expected, "{width}x{height} r{radius} at ({local_x}, {local_y})");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_corner_cuts_about_as_deep_as_a_circle_of_its_radius() {
+        // A circle of radius 12 leaves 12 * (1 - 1/sqrt 2) ~ 3.5 px between
+        // the corner and the curve along the diagonal.
+        let extent = corner_extent(12, 200, 200);
+        let diagonal = (0..extent).find(|&i| corner_inset(i, extent) <= i).unwrap();
+        assert!((3..=5).contains(&diagonal), "diagonal cut {diagonal}");
+        // And it reaches the edges `extent` from the corner, no further.
+        assert_eq!(corner_inset(extent, extent), 0);
+        assert!(corner_inset(0, extent) > 0, "the outermost row is cut");
+    }
+
+    #[test]
+    fn top_rounded_rects_round_only_the_top() {
+        let mut pixels = [0u32; 40 * 20];
+        let mut surface = Surface::new(&mut pixels, 40, 20, 40).unwrap();
+        surface.fill_top_rounded_rect(Rect::new(0, 0, 40, 20), 8, Color::rgb(255, 255, 255));
+        assert_eq!(pixels[0], 0, "top-left cut");
+        assert_eq!(pixels[39], 0, "top-right cut");
+        assert_ne!(pixels[19 * 40], 0, "bottom-left square");
+        assert_ne!(pixels[19 * 40 + 39], 0, "bottom-right square");
+    }
 }

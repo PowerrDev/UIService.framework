@@ -1,28 +1,17 @@
-use about_sevos::AboutApp;
 use ui_abi::{HostV1, HostV2, HostV3, HostV4, HostV5, LoginHostV1, Status, UI_SERVICE_ABI_VERSION};
-use ui_app::App;
 use ui_core::{Color, Rect};
 use ui_platform::{Host, InteractiveHost, InteractiveHostV3, InteractiveHostV4, InteractiveHostV5};
 use ui_render::Canvas;
 use ui_widgets::Button;
-use voyager::VoyagerApp;
 
 use crate::demo;
-use crate::runtime;
-use crate::storage::{StaticCell, TEXT_SCRATCH};
+use crate::desktop;
 use crate::surface;
 use crate::text;
 
 const UI_SERVICE_API_VERSION: u32 = 1;
 const UI_SERVICE_OK: u32 = 1;
 const UI_SERVICE_ERROR: u32 = 0;
-const ABOUT_PIXELS_LEN: usize = AboutApp::WINDOW.pixel_count();
-const VOYAGER_PIXELS_LEN: usize = VoyagerApp::WINDOW.pixel_count();
-
-static ABOUT_PIXELS: StaticCell<[u32; ABOUT_PIXELS_LEN]> =
-    StaticCell::new([0; ABOUT_PIXELS_LEN]);
-static VOYAGER_PIXELS: StaticCell<[u32; VOYAGER_PIXELS_LEN]> =
-    StaticCell::new([0; VOYAGER_PIXELS_LEN]);
 
 #[unsafe(export_name = "UIServiceAPIVersion")]
 pub extern "C" fn api_version() -> u32 {
@@ -147,50 +136,21 @@ pub unsafe extern "C" fn host_clear(host: *const HostV1, xrgb8888: u32) -> u32 {
     }
 }
 
-#[unsafe(export_name = "UIServiceDrawAbout")]
-pub unsafe extern "C" fn draw_about(host: *const HostV1) -> u32 {
+/// The desktop: wallpaper, menu bar, and the windows of the app processes
+/// that connect through the kernel's UI session bridge (the Dock among
+/// them). Returns only if the desktop could not be set up.
+#[unsafe(export_name = "UIServiceRunDesktop")]
+pub unsafe extern "C" fn run_desktop(host: *const HostV5) -> u32 {
     let Some(host_abi) = (unsafe { host.as_ref() }) else {
         return Status::InvalidArgument as u32;
     };
 
-    let mut host = match Host::connect(host_abi) {
-        Ok(host) => host,
-        Err(status) => return status as u32,
-    };
-    let scratch = unsafe { TEXT_SCRATCH.get_mut() };
-    let mut text = text::backend(scratch);
+    // Parse the fonts here, at the shallowest point of the call chain: it is
+    // the deepest single step (~9 KiB of stack, once) and the desktop runs on
+    // the arm64 kernel's 16 KiB boot stack.
+    let _ = crate::text::shared();
 
-    if let Err(status) = unsafe {
-        host.with_surface(|surface| about_sevos::draw_preview(surface, &mut text))
-    } {
-        return status as u32;
-    }
-
-    match host.present(None) {
-        Ok(()) => Status::Ok as u32,
-        Err(status) => status as u32,
-    }
-}
-
-#[unsafe(export_name = "UIServiceRunAbout")]
-pub unsafe extern "C" fn run_about(host: *const HostV5) -> u32 {
-    let Some(host_abi) = (unsafe { host.as_ref() }) else {
-        return Status::InvalidArgument as u32;
-    };
-
-    match unsafe { runtime::run(host_abi, || AboutApp, &ABOUT_PIXELS) } {
-        Ok(()) => Status::Ok as u32,
-        Err(status) => status as u32,
-    }
-}
-
-#[unsafe(export_name = "UIServiceRunVoyager")]
-pub unsafe extern "C" fn run_voyager(host: *const HostV5) -> u32 {
-    let Some(host_abi) = (unsafe { host.as_ref() }) else {
-        return Status::InvalidArgument as u32;
-    };
-
-    match unsafe { runtime::run(host_abi, VoyagerApp::new, &VOYAGER_PIXELS) } {
+    match unsafe { desktop::run(host_abi) } {
         Ok(()) => Status::Ok as u32,
         Err(status) => status as u32,
     }

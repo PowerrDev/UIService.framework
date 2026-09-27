@@ -24,7 +24,7 @@ pub use ui_window as window;
 
 /// Common imports for application code.
 pub mod prelude {
-    pub use ui_app::{App, AppAction, CursorKind, FontWeight, Frame, WindowConfig};
+    pub use ui_app::{App, AppAction, CursorKind, FontWeight, Frame, Menu, MenuItem, MenuItemState, WindowConfig};
     pub use ui_assets::{AssetError, CursorImage};
     pub use ui_core::scale;
     pub use ui_core::system_color;

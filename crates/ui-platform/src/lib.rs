@@ -7,7 +7,7 @@ use core::slice;
 
 use ui_abi::{
     DamageRect, GetSurfaceFn, HostEvent, HostEventType, HostPointerButton, HostV1, HostV2, HostV3, HostV4, HostV5,
-    ListDirectoryFn, PresentFn, Status, SurfaceDescriptor, UI_SERVICE_HOST_CAP_DAMAGE, UI_SERVICE_HOST_CAP_FS,
+    ListDirectoryFn, PresentFn, Status, SurfaceDescriptor, UI_SERVICE_HOST_CAP_ACTIVITY, UI_SERVICE_HOST_CAP_DAMAGE, UI_SERVICE_HOST_CAP_FS,
     UI_SERVICE_HOST_CAP_INPUT, UI_SERVICE_HOST_CAP_PRESENT, UI_SERVICE_HOST_CAP_TIME,
 };
 use ui_core::{Event, Point, PointerButton, Size};
@@ -348,6 +348,12 @@ impl<'a> InteractiveHostV5<'a> {
         // it does not reinterpret the pointer.
         let function = function.map(|f| unsafe { core::mem::transmute::<ListDirectoryFn, _>(f) });
         ui_core::fs::set_backend(abi.context, function);
+        let activity = if abi.capabilities & UI_SERVICE_HOST_CAP_ACTIVITY != 0 {
+            abi.get_activity
+        } else {
+            None
+        };
+        ui_core::activity::set_backend(abi.context, activity);
         Ok(Self { abi })
     }
 
